@@ -1,0 +1,159 @@
+/*
+========================================
+Spectrum Analyzer - Custom CSS Styles
+========================================
+
+This stylesheet provides additional styling for the Spectrum Analyzer application,
+including custom theming, scrollbar styling, file input styling, and colorscale options.
+All modifications are integrated with Tailwind CSS utility classes, ensuring a consistent
+and responsive UI.
+
+Developer Notes:
+- The colors and background classes align with Tailwind's color palette.
+- The custom scrollbar only applies to webkit browsers.
+- The colorscale gradient classes provide quick visualization of various color maps.
+- The `file-input` element uses Tailwind's @apply directive for easy reusability.
+- No functionality removed; comments and clarifications have been added per request.
+*/
+
+/* Base body styling */
+body {
+    background-color: #111827; /* Dark background for a sleek look */
+    color: #e5e7eb; /* Light text for contrast on dark background */
+}
+
+/* Background utilities using Tailwind color tokens */
+.bg-gray-800 {
+    background-color: #1f2937;
+}
+
+.bg-gray-700 {
+    background-color: #374151;
+}
+
+.border-gray-600 {
+    border-color: #4b5563;
+}
+
+/* Tailwind generated text color classes for branding accents */
+.text-blue-500 {
+    color: #3b82f6;
+}
+
+.text-blue-400 {
+    color: #60a5fa;
+}
+
+.bg-blue-600 {
+    background-color: #2563eb;
+}
+
+.hover\:bg-blue-700:hover {
+    background-color: #1d4ed8;
+}
+
+/* 
+========================================
+File Input Styling
+========================================
+
+Applying Tailwind classes via @apply for a consistent, modern file input look.
+*/
+.file-input {
+    @apply block w-full text-sm text-gray-300 bg-gray-700 rounded-md border border-gray-600;
+    @apply focus:outline-none focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50;
+    padding: 0.5rem; /* Slight padding for better aesthetics */
+}
+
+/* Custom pseudo-class for file input button */
+.file-input::file-selector-button {
+    @apply mr-4 px-4 py-2 rounded-md border-0 text-sm font-semibold;
+    @apply bg-blue-600 text-gray-100 hover:bg-blue-700;
+    cursor: pointer;
+    transition: background-color 0.3s ease-in-out;
+}
+
+/* Remove default spinner from number inputs for a cleaner look */
+input[type="number"] {
+    @apply appearance-none;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type="number"] {
+    -moz-appearance: textfield;
+}
+
+/* 
+========================================
+Custom Scrollbar (Webkit only)
+========================================
+
+Custom scrollbar for improved aesthetics on dark backgrounds.
+*/
+::-webkit-scrollbar {
+    width: 12px; /* Slightly larger for easier dragging */
+}
+
+::-webkit-scrollbar-track {
+    background: #1f2937; /* Matches bg-gray-800 */
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: #4b5563; /* Gray for neutral tone */
+    border-radius: 6px;
+    border: 3px solid #1f2937;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: #6b7280; /* Lighter gray on hover */
+}
+
+/* 
+========================================
+Color Scale Selector
+========================================
+
+These classes define interactive boxes that preview various colorscales.
+The gradients are set as backgrounds, and the selected state is indicated by a border.
+*/
+.colorscale-option {
+    height: 30px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease-in-out;
+    border: 2px solid transparent;
+}
+
+.colorscale-option:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+.colorscale-option.selected {
+    border-color: #3b82f6; /* Blue outline to indicate selection */
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+}
+
+/* 
+========================================
+Color Scale Gradients
+========================================
+
+Each gradient corresponds to a known color palette (e.g., Viridis, Plasma).
+These provide a visual cue for users when selecting a colorscale.
+*/
+.viridis { background: linear-gradient(to right, #440154, #414487, #2a788e, #22a884, #7ad151, #fde725); }
+.plasma { background: linear-gradient(to right, #0d0887, #6a00a8, #b12a90, #e16462, #fca636, #f0f921); }
+.inferno { background: linear-gradient(to right, #000004, #420a68, #932667, #dd513a, #fca50a, #fcffa4); }
+.magma { background: linear-gradient(to right, #000004, #3b0f70, #8c2981, #de4968, #fe9f6d, #fcfdbf); }
+.cividis { background: linear-gradient(to right, #00224e, #123570, #3b496c, #575d6d, #707880, #919b92, #b8b8a8, #e1e1b9); }
+.turbo { background: linear-gradient(to right, #30123b, #4145ab, #1b69eb, #01abea, #37c5c4, #7ad151, #fde724); }
+.coolwarm { background: linear-gradient(to right, #3b4cc0, #6f91f2, #9fbffa, #ccdaed, #ede3da, #fbb19b, #ef715e, #b31a25); }
+.spectral { background: linear-gradient(to right, #9e0142, #d53e4f, #f46d43, #fdae61, #fee08b, #ffffbf, #e6f598, #abdda4, #66c2a5, #3288bd, #5e4fa2); }
+.rdylbu { background: linear-gradient(to right, #a50026, #d73027, #f46d43, #fdae61, #fee090, #ffffbf, #e0f3f8, #abd9e9, #74add1, #4575b4, #313695); }
+.picnic { background: linear-gradient(to right, #0000ff, #3399ff, #66ccff, #99ffff, #ccffff, #ffccff, #ff99ff, #ff66ff, #ff3399, #ff0000); }

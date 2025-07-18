@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Spectrum Analyzer</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- A SPECIFIC, RECENT VERSION OF PLOTLY (≥2.4.0) -->
+  <script src="https://cdn.plot.ly/plotly-2.34.0.min.js"></script>
+
+  <!-- Optional custom stylesheet (if you have one) -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen p-8">
+  <div class="max-w-6xl mx-auto bg-gray-800 rounded-xl shadow-md overflow-hidden">
+    <div class="p-8">
+      <h1 class="text-4xl font-bold mb-8 text-center text-blue-500">Spectrum Analyzer</h1>
+
+      <!-- ===============================
+           Individual FITS Files Section
+           =============================== -->
+      <div class="mb-8 space-y-6">
+        <!-- Flux File Input -->
+        <div class="bg-gray-800 p-4 rounded-lg shadow-md">
+          <label for="fluxFile" class="block text-sm font-medium text-blue-400 mb-2">
+            Flux File (.fits)
+          </label>
+          <input type="file" id="fluxFile" accept=".fits" class="file-input">
+        </div>
+
+        <!-- Wavelength File Input -->
+        <div class="bg-gray-800 p-4 rounded-lg shadow-md">
+          <label for="wavelengthFile" class="block text-sm font-medium text-blue-400 mb-2">
+            Wavelength File (.fits)
+          </label>
+          <input type="file" id="wavelengthFile" accept=".fits" class="file-input">
+        </div>
+
+        <!-- Time File Input -->
+        <div class="bg-gray-800 p-4 rounded-lg shadow-md">
+          <label for="timeFile" class="block text-sm font-medium text-blue-400 mb-2">
+            Time File (.fits)
+          </label>
+          <input type="file" id="timeFile" accept=".fits" class="file-input">
+        </div>
+
+        <!-- Number of Plots Input -->
+        <div class="bg-gray-800 p-4 rounded-lg shadow-md">
+          <label for="numPlots" class="block text-sm font-medium text-blue-400 mb-2">
+            Number of Plots
+          </label>
+          <input
+            type="number"
+            id="numPlots"
+            min="1"
+            max="10000"
+            value="1000"
+            class="w-full px-3 py-2 text-gray-300 bg-gray-700 rounded-md border border-gray-600
+                   focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
+          >
+        </div>
+      </div>
+
+      <!-- ===============================
+           Custom Bands Section
+           =============================== -->
+      <div class="mb-8">
+        <h2 class="text-2xl font-semibold mb-4 text-blue-500">Custom Bands</h2>
+        <div id="customBands" class="space-y-4">
+          <!-- Custom bands are added dynamically by JS -->
+        </div>
+        <button
+          id="addBandBtn"
+          class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200"
+        >
+          Add Band
+        </button>
+      </div>
+
+      <!-- ===============================
+           Color Scale Selection
+           =============================== -->
+      <div class="mb-8">
+        <label class="block text-sm font-medium text-blue-400 mb-2">Color Scale</label>
+        <div id="colorscaleSelector" class="grid grid-cols-5 gap-2">
+          <!-- Color scale options added dynamically by JS -->
+        </div>
+      </div>
+
+      <!-- ===============================
+           Generate Plots Button
+           =============================== -->
+      <button
+        id="generatePlotsBtn"
+        class="w-full px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700
+               transition duration-200 text-lg font-semibold"
+      >
+        Generate Plots
+      </button>
+
+      <!-- ===============================
+           MAST Directory Upload Section
+           =============================== -->
+      <div class="mb-8 mt-12">
+        <h2 class="text-2xl font-semibold mb-4 text-blue-500">Upload MAST Directory (Zipped)</h2>
+        <input type="file" id="mastZipFile" accept=".zip" class="file-input mb-4">
+        <button
+          id="uploadMastBtn"
+          class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition duration-200"
+        >
+          Process MAST Folder
+        </button>
+      </div>
+
+      <!-- ===============================
+           Plots Display Section
+           =============================== -->
+      <div id="plotsContainer" class="mt-12 grid grid-cols-1 gap-16">
+        <!-- 3D Surface Plot Container -->
+        <div>
+          <h3 class="text-2xl font-semibold mb-4 text-blue-500">3D Surface Plot</h3>
+          <div id="surfacePlot"
+               class="w-full h-[600px] bg-gray-700 rounded-lg shadow-lg overflow-hidden">
+          </div>
+
+          <!-- Reset View for 3D Surface Plot -->
+          <button
+            id="resetSurfaceViewBtn"
+            class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200"
+          >
+            Reset View
+          </button>
+        </div>
+
+        <!-- Heatmap Plot Container -->
+        <div>
+          <h3 class="text-2xl font-semibold mb-4 text-blue-500">Heatmap</h3>
+          <div id="heatmapPlot"
+               class="w-full h-[600px] bg-gray-700 rounded-lg shadow-lg overflow-hidden">
+          </div>
+
+          <!-- Reset View for Heatmap Plot -->
+          <button
+            id="resetHeatmapViewBtn"
+            class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200"
+          >
+            Reset View
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Your main JS script -->
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
