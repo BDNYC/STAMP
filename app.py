@@ -345,7 +345,7 @@ def create_surface_plot_with_visits(flux, wavelength, time, title, num_plots, re
         else:
             hover_z_format = '.4f'  # Regular notation
     else:
-        Z_adjusted = Z / 10  # Variability percentage
+        Z_adjusted = Z  # No division by 10 for variability percentage
         z_axis_title = 'Variability %'
         hover_z_label = 'Variability'
         hover_z_format = '.2f'
@@ -356,11 +356,11 @@ def create_surface_plot_with_visits(flux, wavelength, time, title, num_plots, re
         if isinstance(z_range, tuple):
             if z_axis_display == 'variability':
                 # For variability, interpret as percentage
-                z_min_range = z_range[0] if z_range[0] is not None else Z_adjusted.min() * 10
-                z_max_range = z_range[1] if z_range[1] is not None else Z_adjusted.max() * 10
-                Z_clipped = np.clip(Z_adjusted, z_min_range / 10, z_max_range / 10)
-                z_min = z_min_range / 10
-                z_max = z_max_range / 10
+                z_min_range = z_range[0] if z_range[0] is not None else Z_adjusted.min()
+                z_max_range = z_range[1] if z_range[1] is not None else Z_adjusted.max()
+                Z_clipped = np.clip(Z_adjusted, z_min_range, z_max_range)
+                z_min = z_min_range
+                z_max = z_max_range
                 logger.info(f"Clipping Z values to range: {z_min_range}% to {z_max_range}%")
             else:
                 # For flux, use raw values
@@ -375,9 +375,9 @@ def create_surface_plot_with_visits(flux, wavelength, time, title, num_plots, re
             if z_axis_display == 'variability':
                 z_min_range = -z_range
                 z_max_range = z_range
-                Z_clipped = np.clip(Z_adjusted, z_min_range / 10, z_max_range / 10)
-                z_min = z_min_range / 10
-                z_max = z_max_range / 10
+                Z_clipped = np.clip(Z_adjusted, z_min_range, z_max_range)
+                z_min = z_min_range
+                z_max = z_max_range
             else:
                 Z_clipped = Z_adjusted
                 z_min = Z_adjusted.min()
@@ -598,44 +598,40 @@ def create_surface_plot_with_visits(flux, wavelength, time, title, num_plots, re
 def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_60=True,
                         smooth_sigma=2, wavelength_unit='um', custom_bands=None, colorscale='Viridis', z_range=None,
                         z_axis_display='variability', flux_unit='Unknown'):
-    """Create 2D heatmap plot - EXACT COPY of surface plot logic."""
-
+    """Create 2D heatmap plot with support for band overlays."""
 
     x, y, X, Y, Z, wavelength_label = process_data(
         flux, wavelength, time, num_plots, remove_first_60, False,
         smooth_sigma, wavelength_unit, z_axis_display
     )
 
-
     if z_axis_display == 'flux':
         Z_adjusted = Z  # Raw flux, no adjustment
         colorbar_title = f'Flux ({flux_unit})'
         hover_z_label = 'Flux'
-
-        # Determine appropriate format based on flux scale
         flux_max = np.nanmax(np.abs(Z_adjusted))
         if flux_max < 0.01 or flux_max > 1000:
-            hover_z_format = '.2e'  # Scientific notation
+            hover_z_format = '.2e'
             colorbar_tickformat = '.2e'
         else:
-            hover_z_format = '.4f'  # Regular notation
+            hover_z_format = '.4f'
             colorbar_tickformat = None
     else:
-        Z_adjusted = Z / 10  # Variability percentage - EXACT SAME as surface plot
+        Z_adjusted = Z  # No division by 10 for variability percentage
         colorbar_title = 'Variability %'
         hover_z_label = 'Variability'
         hover_z_format = '.4f'
         colorbar_tickformat = None
 
-
+    # Handle Z range
     if z_range:
         if isinstance(z_range, tuple):
             if z_axis_display == 'variability':
-                z_min_range = z_range[0] if z_range[0] is not None else Z_adjusted.min() * 10
-                z_max_range = z_range[1] if z_range[1] is not None else Z_adjusted.max() * 10
-                Z_clipped = np.clip(Z_adjusted, z_min_range / 10, z_max_range / 10)
-                z_min = z_min_range / 10
-                z_max = z_max_range / 10
+                z_min_range = z_range[0] if z_range[0] is not None else Z_adjusted.min()
+                z_max_range = z_range[1] if z_range[1] is not None else Z_adjusted.max()
+                Z_clipped = np.clip(Z_adjusted, z_min_range, z_max_range)
+                z_min = z_min_range
+                z_max = z_max_range
             else:
                 z_min_range = z_range[0] if z_range[0] is not None else Z_adjusted.min()
                 z_max_range = z_range[1] if z_range[1] is not None else Z_adjusted.max()
@@ -646,9 +642,9 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
             if z_axis_display == 'variability':
                 z_min_range = -z_range
                 z_max_range = z_range
-                Z_clipped = np.clip(Z_adjusted, z_min_range / 10, z_max_range / 10)
-                z_min = z_min_range / 10
-                z_max = z_max_range / 10
+                Z_clipped = np.clip(Z_adjusted, z_min_range, z_max_range)
+                z_min = z_min_range
+                z_max = z_max_range
             else:
                 Z_clipped = Z_adjusted
                 z_min = Z_adjusted.min()
@@ -658,48 +654,99 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
         z_min = Z_adjusted.min()
         z_max = Z_adjusted.max()
 
-
-    if z_axis_display == 'flux':
-        flux_max = np.nanmax(np.abs(Z_adjusted))
-        if flux_max < 0.01 or flux_max > 1000:
-            hover_z_format = '.2e'
-        else:
-            hover_z_format = '.4f'
-    else:
-        hover_z_format = '.4f'
-
-
     hovertemplate = (
-            'Time: %{x:.2f} hours<br>' +
-            wavelength_label + ': %{y:.4f}<br>' +
-            hover_z_label + ': %{z:' + hover_z_format + '}<br>' +
-            '<extra></extra>'
+        'Time: %{x:.2f} hours<br>' +
+        wavelength_label + ': %{y:.4f}<br>' +
+        hover_z_label + ': %{z:' + hover_z_format + '}<br>' +
+        '<extra></extra>'
     )
 
-    # Debug: Log the data being passed to heatmap
-    logger.info(f"HEATMAP DEBUG - Z_clipped min/max: {np.nanmin(Z_clipped):.6e}/{np.nanmax(Z_clipped):.6e}")
-    logger.info(f"HEATMAP DEBUG - Z_clipped shape: {Z_clipped.shape}")
-    logger.info(f"HEATMAP DEBUG - x shape: {len(x)}, y shape: {len(y)}")
-    logger.info(f"HEATMAP DEBUG - Non-zero values in Z_clipped: {np.count_nonzero(Z_clipped)}/{Z_clipped.size}")
-
-
-    Z_clipped = np.array(Z_clipped, dtype=np.float64)
     x = np.array(x, dtype=np.float64)
     y = np.array(y, dtype=np.float64)
+    Z_clipped = np.array(Z_clipped, dtype=np.float64)
 
-    logger.info(f"HEATMAP DEBUG - After numpy conversion: Z_clipped dtype: {Z_clipped.dtype}")
-
-    # Create heatmap with minimal parameters first
+    data = []
+    # Full spectrum
     heatmap_full = go.Heatmap(
         x=x,
         y=y,
         z=Z_clipped,
         colorscale=colorscale,
         hovertemplate=hovertemplate,
-        name='Full Spectrum'
+        colorbar=dict(
+            title=colorbar_title,
+            titleside='right',
+            titlefont=dict(size=12, color='#ffffff'),
+            tickfont=dict(size=10, color='#ffffff'),
+            thickness=15,
+            len=0.8,
+            tickformat=colorbar_tickformat,
+        ),
+        name='Full Spectrum',
+        visible=True,
+        zmin=z_min,
+        zmax=z_max,
     )
+    data.append(heatmap_full)
+    # Gray mask for band overlays (matches the 3D plot logic)
+    gray_mask = go.Heatmap(
+        x=x,
+        y=y,
+        z=Z_clipped,
+        colorscale=[[0, 'rgba(200, 200, 200, 0.3)'], [1, 'rgba(220, 220, 220, 0.3)']],
+        showscale=False,
+        name='Gray Mask',
+        hoverinfo='skip',
+        visible=False
+    )
+    data.append(gray_mask)
 
-    data = [heatmap_full]
+    # Add custom bands as overlays (as additional heatmaps, only band values shown, rest NaN)
+    if custom_bands:
+        for band in custom_bands:
+            band_mask = (y >= band['start']) & (y <= band['end'])
+            Z_band = np.where(band_mask[:, None], Z_clipped, np.nan)
+            band_heatmap = go.Heatmap(
+                x=x,
+                y=y,
+                z=Z_band,
+                colorscale=colorscale,
+                hovertemplate=hovertemplate,
+                colorbar=None,
+                name=band['name'],
+                visible=False,
+                zmin=z_min,
+                zmax=z_max,
+            )
+            data.append(band_heatmap)
+
+    # Create updatemenus for toggling full spectrum and bands
+    updatemenus = [
+        dict(
+            type="buttons",
+            direction="right",
+            x=0.1,
+            y=-0.07,
+            xanchor="center",
+            yanchor="top",
+            buttons=[
+                dict(
+                    args=[{'visible': [True, False] + [False] * (len(custom_bands) if custom_bands else 0)}],
+                    label="Full Spectrum",
+                    method="update"
+                )
+            ] + [
+                dict(
+                    args=[{'visible': [False, True] + [i == j for j in range(len(custom_bands) if custom_bands else 0)]}],
+                    label=band['name'],
+                    method="update"
+                ) for i, band in enumerate(custom_bands or [])
+            ],
+            pad={"r": 10, "t": 10},
+            showactive=True,
+            active=0
+        )
+    ]
 
     layout = go.Layout(
         template="plotly_dark",
@@ -725,7 +772,8 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
             linecolor='#555555'
         ),
         margin=dict(l=50, r=50, t=80, b=50),
-        hovermode='closest'
+        hovermode='closest',
+        updatemenus=updatemenus
     )
 
     fig = go.Figure(data=data, layout=layout)
