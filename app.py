@@ -598,7 +598,7 @@ def create_surface_plot_with_visits(flux, wavelength, time, title, num_plots, re
 def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_60=True,
                         smooth_sigma=2, wavelength_unit='um', custom_bands=None, colorscale='Viridis', z_range=None,
                         z_axis_display='variability', flux_unit='Unknown'):
-    """Create 2D heatmap plot with support for band overlays."""
+    """Create 2D heatmap plot with support for band overlays"""
 
     x, y, X, Y, Z, wavelength_label = process_data(
         flux, wavelength, time, num_plots, remove_first_60, False,
