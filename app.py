@@ -345,7 +345,7 @@ def create_surface_plot_with_visits(flux, wavelength, time, title, num_plots, re
         else:
             hover_z_format = '.4f'  # Regular notation
     else:
-        Z_adjusted = Z  # No division by 10 for variability percentage
+        Z_adjusted = Z
         z_axis_title = 'Variability %'
         hover_z_label = 'Variability'
         hover_z_format = '.2f'
@@ -606,7 +606,7 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
     )
 
     if z_axis_display == 'flux':
-        Z_adjusted = Z  # Raw flux, no adjustment
+        Z_adjusted = Z
         colorbar_title = f'Flux ({flux_unit})'
         hover_z_label = 'Flux'
         flux_max = np.nanmax(np.abs(Z_adjusted))
@@ -617,7 +617,7 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
             hover_z_format = '.4f'
             colorbar_tickformat = None
     else:
-        Z_adjusted = Z  # No division by 10 for variability percentage
+        Z_adjusted = Z
         colorbar_title = 'Variability %'
         hover_z_label = 'Variability'
         hover_z_format = '.4f'
