@@ -265,6 +265,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const dl = document.querySelector('a[href="/download_plots"]');
   if (dl) dl.addEventListener('click', downloadAllWithVideo);
+
 })
 
 
@@ -446,6 +447,14 @@ async function uploadMastDirectory() {
   plotOriginal.surfacePlot = null;
   plotOriginal.heatmapPlot = null;
   window.__referenceSpectrum = null;
+
+  // Store user ranges for spectrum viewer
+  window.__userRanges = {
+    timeRangeMin: timeRangeMin || null,
+    timeRangeMax: timeRangeMax || null,
+    wavelengthRangeMin: wavelengthRangeMin || null,
+    wavelengthRangeMax: wavelengthRangeMax || null
+  };
 
   const uploadBtn = document.getElementById('uploadMastBtn');
   const originalText = uploadBtn.textContent;
@@ -640,6 +649,47 @@ function showSpectrumAtTime(clickData, plotDiv) {
     if (Array.isArray(timeData[0])) timeData = timeData[0];
   }
 
+  // Apply user-defined ranges to spectrum data
+  const ranges = window.__userRanges || {};
+
+  // Apply wavelength filtering
+  if (ranges.wavelengthRangeMin || ranges.wavelengthRangeMax) {
+    const wlMin = ranges.wavelengthRangeMin ? parseFloat(ranges.wavelengthRangeMin) : -Infinity;
+    const wlMax = ranges.wavelengthRangeMax ? parseFloat(ranges.wavelengthRangeMax) : Infinity;
+
+    const wlIndices = [];
+    for (let i = 0; i < wavelengthData.length; i++) {
+      if (wavelengthData[i] >= wlMin && wavelengthData[i] <= wlMax) {
+        wlIndices.push(i);
+      }
+    }
+
+    if (wlIndices.length > 0) {
+      wavelengthData = wlIndices.map(i => wavelengthData[i]);
+      fluxData = wlIndices.map(i => fluxData[i]);
+      if (errData) errData = wlIndices.map(i => errData[i]);
+    }
+  }
+
+  // Apply time filtering
+  if (ranges.timeRangeMin || ranges.timeRangeMax) {
+    const timeMin = ranges.timeRangeMin ? parseFloat(ranges.timeRangeMin) : -Infinity;
+    const timeMax = ranges.timeRangeMax ? parseFloat(ranges.timeRangeMax) : Infinity;
+
+    const timeIndices = [];
+    for (let i = 0; i < timeData.length; i++) {
+      if (timeData[i] >= timeMin && timeData[i] <= timeMax) {
+        timeIndices.push(i);
+      }
+    }
+
+    if (timeIndices.length > 0) {
+      timeData = timeIndices.map(i => timeData[i]);
+      fluxData = fluxData.map(row => timeIndices.map(i => row[i]));
+      if (errData) errData = errData.map(row => timeIndices.map(i => row[i]));
+    }
+  }
+
   let timeIndex = 0;
   let minDiff = Infinity;
   for (let i = 0; i < timeData.length; i++) {
@@ -684,7 +734,6 @@ function showSpectrumAtTime(clickData, plotDiv) {
   updateSpectrumPlot();
   document.getElementById('spectrumContainer').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
-
 // Function to update spectrum plot
 function updateSpectrumPlot() {
   if (!currentSpectrumData) { return; }
