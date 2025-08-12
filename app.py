@@ -954,6 +954,8 @@ def upload_mast():
         else:
             z_data = flux_norm_2d_filtered
 
+        ref_spec = np.nanmedian(np.asarray(flux_raw_2d_filtered), axis=1)
+
         surface_plot = create_surface_plot_with_visits(
             z_data,
             wavelength_1d_norm if z_axis_display != 'flux' else wavelength_1d_raw,
@@ -1000,13 +1002,13 @@ def upload_mast():
         return jsonify({
             'surface_plot': surface_plot.to_json(),
             'heatmap_plot': heatmap_plot.to_json(),
-            'metadata': metadata
+            'metadata': metadata,
+            'reference_spectrum': json.dumps(ref_spec.tolist())
         })
 
     except Exception as e:
         logger.error(f"Error in upload_mast: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 400
-
 
 
 if __name__ == '__main__':
