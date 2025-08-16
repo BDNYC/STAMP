@@ -236,12 +236,27 @@ def process_data(flux, wavelength, time, num_plots, apply_binning=True,
         logger.info(f'Time array shape: {time.shape if hasattr(time, "shape") else len(time)}')
         logger.info(f'Z-axis display mode: {z_axis_display}')
 
+        # Ensure wavelength & flux rows align, drop non-finite wavelengths, and sort by wavelength
         min_length = min(flux.shape[0], len(wavelength))
         flux = flux[:min_length]
-        wavelength = wavelength[:min_length]
+        wavelength = np.asarray(wavelength[:min_length], dtype=float)
+
+        finite_mask = np.isfinite(wavelength)
+        if not np.all(finite_mask):
+            logger.info(f"Removing {np.count_nonzero(~finite_mask)} non-finite wavelength rows")
+        wavelength = wavelength[finite_mask]
+        flux = flux[finite_mask, :]
+
+        sort_idx = np.argsort(wavelength)
+        if not np.all(sort_idx == np.arange(len(sort_idx))):
+            logger.info("Sorting wavelengths to be strictly increasing")
+        wavelength = wavelength[sort_idx]
+        flux = flux[sort_idx, :]
 
         if not isinstance(time, np.ndarray):
-            time = np.array(time)
+            time = np.array(time, dtype=float)
+        else:
+            time = time.astype(float)
 
         bin_size = calculate_bin_size(flux.shape[1], num_plots)
         logger.info(f'Calculated bin size: {bin_size}')
@@ -264,7 +279,7 @@ def process_data(flux, wavelength, time, num_plots, apply_binning=True,
             wavelength_label = 'Wavelength (µm)'
 
         x = time
-        logger.info(f'Time array after processing: min={x.min():.4f}, max={x.max():.4f}, shape={x.shape}')
+        logger.info(f'Time array after processing: min={np.nanmin(x):.4f}, max={np.nanmax(x):.4f}, shape={x.shape}')
 
         y = wavelength
         X, Y = np.meshgrid(x, y)
@@ -273,18 +288,19 @@ def process_data(flux, wavelength, time, num_plots, apply_binning=True,
         if z_axis_display == 'flux':
             # Use raw flux values directly
             Z = flux
-            logger.info(f'Raw flux range: {Z.min():.4e} to {Z.max():.4e}')
+            logger.info(f'Raw flux range: {np.nanmin(Z):.4e} to {np.nanmax(Z):.4e}')
         else:
             # Calculate variability percentage from normalized flux
             # Assumes flux is normalized where 1.0 = median
             Z = (flux - 1) * 100
-            logger.info(f'Variability range: {Z.min():.2f}% to {Z.max():.2f}%')
+            logger.info(f'Variability range: {np.nanmin(Z):.2f}% to {np.nanmax(Z):.2f}%')
 
         return x, y, X, Y, Z, wavelength_label
 
     except Exception as e:
         logger.error(f"Error in process_data: {str(e)}")
         raise
+
 
 
 def identify_visits(times_hours, gap_threshold=0.5):
@@ -418,7 +434,8 @@ def create_surface_plot_with_visits(flux, wavelength, time, title, num_plots,
         scene=dict(
             xaxis=dict(title='Time (hours)', backgroundcolor='rgba(0,0,0,0)', gridcolor='#555555', zeroline=False, showspikes=False),
             yaxis=dict(title=wavelength_label, backgroundcolor='rgba(0,0,0,0)', gridcolor='#555555', zeroline=False, showspikes=False),
-            zaxis=dict(title='Raw Flux' if z_axis_display == 'flux' else 'Variability (%)', backgroundcolor='rgba(0,0,0,0)', gridcolor='#555555', zeroline=False, showspikes=False)
+            zaxis=dict(title='Raw Flux' if z_axis_display == 'flux' else 'Variability (%)', backgroundcolor='rgba(0,0,0,0)', gridcolor='#555555', zeroline=False, showspikes=False),
+            aspectmode='cube'
         ),
         margin=dict(l=20, r=20, b=20, t=60),
         autosize=True,
@@ -439,12 +456,16 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots,
         smooth_sigma, wavelength_unit, z_axis_display
     )
 
+    # Make sure Z is (len(y) x len(x)) and y strictly increasing (process_data enforces this)
+    if Z.shape != (len(y), len(x)):
+        raise ValueError(f"Heatmap Z shape {Z.shape} does not match (len(y), len(x)) = {(len(y), len(x))}")
+
     if z_axis_display == 'flux':
         Z_adjusted = Z
         colorbar_title = f'Flux ({flux_unit})'
         hover_z_label = 'Flux'
         flux_max = np.nanmax(np.abs(Z_adjusted))
-        if flux_max < 0.01 or flux_max > 1000:
+        if (flux_max < 0.01) or (flux_max > 1000):
             hover_z_format = '.2e'
             colorbar_tickformat = '.2e'
         else:
@@ -462,10 +483,10 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots,
     if isinstance(z_range, tuple) or isinstance(z_range, list):
         if z_axis_display == 'variability':
             z_min_range = -z_range[1] if z_range[0] is None else z_range[0]
-            z_max_range = z_range[1] if z_range[1] is not None else Z_adjusted.max()
+            z_max_range = z_range[1] if z_range[1] is not None else np.nanmax(Z_adjusted)
         else:
-            z_min_range = z_range[0] if z_range[0] is not None else Z_adjusted.min()
-            z_max_range = z_range[1] if z_range[1] is not None else Z_adjusted.max()
+            z_min_range = z_range[0] if z_range[0] is not None else np.nanmin(Z_adjusted)
+            z_max_range = z_range[1] if z_range[1] is not None else np.nanmax(Z_adjusted)
         Z_clipped = np.clip(Z_adjusted, z_min_range, z_max_range)
         z_min = z_min_range
         z_max = z_max_range
@@ -474,15 +495,15 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots,
             z_min_range = -z_range
             z_max_range = z_range
         else:
-            z_min_range = Z_adjusted.min()
-            z_max_range = Z_adjusted.max()
+            z_min_range = np.nanmin(Z_adjusted)
+            z_max_range = np.nanmax(Z_adjusted)
         Z_clipped = np.clip(Z_adjusted, z_min_range, z_max_range)
         z_min = z_min_range
         z_max = z_max_range
     else:
         Z_clipped = Z_adjusted
-        z_min = Z_adjusted.min()
-        z_max = Z_adjusted.max()
+        z_min = np.nanmin(Z_adjusted)
+        z_max = np.nanmax(Z_adjusted)
 
     heatmap = go.Heatmap(
         x=x,
@@ -508,6 +529,9 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots,
 
     data = [heatmap]
 
+    # IMPORTANT: remove aspect locking and explicitly set y-range to actual wavelength span
+    y_min, y_max = float(np.nanmin(y)), float(np.nanmax(y))
+
     layout = go.Layout(
         template='plotly_dark',
         paper_bgcolor='rgba(0,0,0,0)',
@@ -515,7 +539,7 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots,
         font=dict(color='#ffffff'),
         title=dict(text=title, x=0.5),
         xaxis=dict(title='Time (hours)', showspikes=False, gridcolor='#555555', linecolor='#555555', zeroline=False),
-        yaxis=dict(title=wavelength_label, showspikes=False, gridcolor='#555555', linecolor='#555555', zeroline=False),
+        yaxis=dict(title=wavelength_label, showspikes=False, gridcolor='#555555', linecolor='#555555', zeroline=False, range=[y_min, y_max]),
         margin=dict(l=20, r=20, b=60, t=60),
         hovermode='closest',
         showlegend=False
@@ -523,6 +547,7 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots,
 
     fig = go.Figure(data=data, layout=layout)
     return fig
+
 
 
 
@@ -686,7 +711,7 @@ def download_plots():
     mp4_bytes = None
     mp4_name = None
     video_html = '<div id="videoBox" style="min-height:120px;display:flex;align-items:center;justify-content:flex-start;color:#cbd5e1">No video available in this session.</div>'
-    if mp4_path and os.path.exists(mp4_path):
+    if (mp4_path and os.path.exists(mp4_path)):
         with open(mp4_path, 'rb') as f:
             mp4_bytes = f.read()
         mp4_name = "2d_spectrum_" + time.strftime('%Y%m%d_%H%M%S') + ".mp4"

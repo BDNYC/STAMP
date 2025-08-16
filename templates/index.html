@@ -32,7 +32,10 @@
         .spectral { background: linear-gradient(to right, #9e0142, #f46d43, #fee08b, #abdda4, #5e4fa2); }
         .rdylbu { background: linear-gradient(to right, #a50026, #f46d43, #fee090, #abd9e9, #313695); }
         .picnic { background: linear-gradient(to right, #0000ff, #3399ff, #66ccff, #99ffff, #ccffff, #ffffff, #ffccff, #ff99ff, #ff66cc, #ff3399, #ff0000); }
-        #plotsContainer { min-height: 600px; }
+
+        /* Slightly taller overall plots container */
+        #plotsContainer { min-height: 680px; }
+
         .plot-wrapper {
             background-color: rgba(31, 41, 55, 0.5);
             border-radius: 8px;
@@ -62,6 +65,9 @@
         .range-inputs input { flex: 1; }
         .range-separator { color: #9CA3AF; font-weight: 500; }
         #surfacePlot .modebar, #heatmapPlot .modebar, #spectrumPlot .modebar { left: auto !important; right: 0 !important; transform: none !important; justify-content: flex-end !important; }
+
+        /* Ensure square plot areas for surface & heatmap */
+        .square-plot { aspect-ratio: 1 / 1; }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100">
@@ -180,7 +186,8 @@
                         </label>
                     </div>
                     <p class="text-xs text-gray-400 mb-2">When enabled, click on any point to view spectrum at that time</p>
-                    <div id="surfacePlot" style="width: 100%; height: 800px; margin: 0 auto;"></div>
+                    <!-- Slightly taller + square -->
+                    <div id="surfacePlot" class="square-plot" style="width: 100%; height: 640px; margin: 0 auto;"></div>
                     <div class="mt-3 flex flex-wrap items-center gap-2">
                         <div id="surfaceBandButtons" class="flex flex-wrap items-center gap-2"></div>
                         <button id="resetSurfaceViewBtn" class="px-4 py-2 bg-gray-600 text-gray-100 rounded-md hover:bg-gray-700 transition duration-200">Reset View</button>
@@ -199,11 +206,14 @@
                         <span id="spectrumInfo" class="text-gray-300"></span>
                         <button id="nextSpectrumBtn" class="px-4 py-2 bg-blue-600 text-gray-100 rounded-md hover:bg-blue-700 transition duration-200">Next →</button>
                     </div>
-                    <div id="spectrumPlot" style="width: 100%; height: 400px; margin: 0 auto;"></div>
+                    <!-- Slightly taller to match JS update -->
+                    <div id="spectrumPlot" style="width: 100%; height: 480px; margin: 0 auto;"></div>
                     <div class="mt-3 flex flex-wrap items-center gap-2">
                         <div id="spectrumBandButtons" class="flex flex-wrap items-center gap-2"></div>
                     </div>
                     <div class="flex items-center justify-center mt-4 space-x-4">
+                        <!-- NEW: Toggle between vs_wavelength and vs_time -->
+                        <button id="toggleSpectrumModeBtn" class="px-4 py-2 bg-gray-700 text-gray-100 rounded-md hover:bg-gray-600 transition duration-200">X-axis: Wavelength</button>
                         <button id="playAnimationBtn" class="px-4 py-2 bg-green-600 text-gray-100 rounded-md hover:bg-green-700 transition duration-200">▶ Play</button>
                         <label class="text-sm text-gray-300 flex items-center">
                             Speed:
@@ -226,7 +236,8 @@
                         </label>
                     </div>
                     <p class="text-xs text-gray-400 mb-2">When enabled, click on any point to view spectrum at that time</p>
-                    <div id="heatmapPlot" style="width: 100%; height: 800px; margin: 0 auto;"></div>
+                    <!-- Slightly taller + square -->
+                    <div id="heatmapPlot" class="square-plot" style="width: 100%; height: 640px; margin: 0 auto;"></div>
                     <div class="mt-3 flex flex-wrap items-center gap-2">
                         <div id="heatmapBandButtons" class="flex flex-wrap items-center gap-2"></div>
                         <button id="resetHeatmapViewBtn" class="px-4 py-2 bg-gray-600 text-gray-100 rounded-md hover:bg-gray-700 transition duration-200">Reset View</button>
