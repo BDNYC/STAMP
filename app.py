@@ -119,33 +119,57 @@ def apply_data_ranges(wavelength, flux, time, wavelength_range=None, time_range=
     return filtered_wavelength, filtered_flux, filtered_time, range_info
 
 
+def _first_key(group, *candidates):
+    for k in candidates:
+        if k in group:
+            return k
+    return None
+
+
 def load_integrations_from_h5(file_path):
     with h5py.File(file_path, 'r') as f:
-        if not all(k in f for k in ["calibrated_optspec", "eureka_wave_1d", "time"]):
+        flux_k = _first_key(f, "calibrated_optspec", "stdspec", "optspec")
+        wave_k = _first_key(f, "eureka_wave_1d", "wave_1d", "wavelength", "wave")
+        time_k = _first_key(f, "time", "bmjd", "mjd", "bjd", "time_bjd", "time_mjd")
+        err_k  = _first_key(f, "calibrated_opterr", "stdvar", "error", "flux_error", "sigma")
+
+        if not (flux_k and wave_k and time_k):
             return None, None
-        flux = f['calibrated_optspec'][:]
-        wavelength = f['eureka_wave_1d'][:]
-        time_arr = f['time'][:]
-        err = f['calibrated_opterr'][:] if 'calibrated_opterr' in f else None
+
+        flux = f[flux_k][:]
+        wl   = f[wave_k][:]
+        t    = f[time_k][:]
+
+        err = None
+        if err_k:
+            err_data = f[err_k][:]
+            if err_k.endswith("stdvar"):
+                err = np.sqrt(err_data)
+            else:
+                err = err_data
+
         integrations = []
         for i in range(flux.shape[0]):
             integrations.append({
-                'wavelength': wavelength,
-                'flux': flux[i, :],
-                'error': (err[i, :] if err is not None else np.full(flux.shape[1], np.nan)),
-                'time': time_arr[i]
+                "wavelength": wl,
+                "flux": flux[i, :],
+                "error": (err[i, :] if err is not None else np.full(flux.shape[1], np.nan)),
+                "time": t[i]
             })
+
         header_info = {
-            'filename': os.path.basename(file_path),
-            'target': 'Unknown',
-            'instrument': 'Unknown',
-            'filter': 'Unknown',
-            'grating': 'Unknown',
-            'obs_date': 'Unknown',
-            'exposure_time': 'Unknown',
-            'flux_unit': 'Unknown'
+            "filename": os.path.basename(file_path),
+            "target": "Unknown",
+            "instrument": "Unknown",
+            "filter": "Unknown",
+            "grating": "Unknown",
+            "obs_date": "Unknown",
+            "exposure_time": "Unknown",
+            "flux_unit": "Unknown"
         }
         return integrations, header_info
+
+
 
 def load_integrations_from_fits(file_path):
     try:
