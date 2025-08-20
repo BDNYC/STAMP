@@ -109,16 +109,33 @@ function applyBandToPlot(plotId, bands) {
       const z = trace.z;
       const inZ = [];
       const outZ = [];
-      for (let i = 0; i < z.length; i++) {
-        const inBand = bands.some(b => yvec[i] >= b.start && yvec[i] <= b.end);
-        const row = z[i];
-        inZ[i] = inBand ? row.slice() : new Array(row.length).fill(NaN);
-        outZ[i] = inBand ? new Array(row.length).fill(NaN) : row.slice();
+      if (z.length === yvec.length) {
+        for (let i = 0; i < z.length; i++) {
+          const inBand = bands.some(b => yvec[i] >= b.start && yvec[i] <= b.end);
+          const row = z[i];
+          inZ[i] = inBand ? row.slice() : new Array(row.length).fill(NaN);
+          outZ[i] = inBand ? new Array(row.length).fill(NaN) : row.slice();
+        }
+      } else if (z[0] && z[0].length === yvec.length) {
+        for (let i = 0; i < z.length; i++) {
+          inZ[i] = [];
+          outZ[i] = [];
+          for (let j = 0; j < z[i].length; j++) {
+            const inBand = bands.some(b => yvec[j] >= b.start && yvec[j] <= b.end);
+            if (inBand) {
+              inZ[i][j] = z[i][j];
+              outZ[i][j] = NaN;
+            } else {
+              inZ[i][j] = NaN;
+              outZ[i][j] = z[i][j];
+            }
+          }
+        }
       }
       const base = {};
       for (const k in trace) if (k !== 'z') base[k] = trace[k];
-      newData.push({ ...base, z: inZ, name: trace.name });
-      newData.push({ ...base, z: outZ, name: (trace.name || '') + ' Gray', showscale: false, opacity: 0.35, colorscale: [[0,'#888'],[1,'#888']], hoverinfo: 'skip' });
+      newData.push({ ...base, z: outZ, name: (trace.name || '') + ' Gray', showscale: false, opacity: 0.35, colorscale: [[0,'#888'],[1,'#888']], hoverinfo: 'skip', hoverongaps: false });
+      newData.push({ ...base, z: inZ, name: trace.name, hoverongaps: false });
     } else {
       newData.push(trace);
     }
@@ -126,6 +143,8 @@ function applyBandToPlot(plotId, bands) {
   Plotly.react(div, newData, div.layout);
   setupPlotClickHandler(div);
 }
+
+
 
 function createPlot(plotId, data, layout, config) {
   const div = document.getElementById(plotId);
