@@ -1,4 +1,4 @@
-import os, sys
-sys.path.append(os.path.dirname(__file__))
+import sys
+sys.stderr.write(f"WSGI USING: {sys.executable}\n")
 
 from app import app as application
