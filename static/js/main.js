@@ -746,7 +746,7 @@ function updateAnimationSpeed(newSpeed) {
 }
 
 function showSpectrumAtTime(clickData, plotDiv) {
-  const plotData = (plotDiv && plotDiv.data) ? plotDiv.data : [];
+  const plotData = (plotOriginal[plotDiv.id] && plotOriginal[plotDiv.id].length) ? plotOriginal[plotDiv.id] : ((plotDiv && plotDiv.data) ? plotDiv.data : []);
   let mainTrace = null;
   let allVisitTraces = [];
 
@@ -1402,8 +1402,9 @@ async function ensureSpectrumInitialized() {
 
   let timeArray = null;
   let wlArray = null;
-  for (let i = 0; i < sourceDiv.data.length; i++) {
-    const tr = sourceDiv.data[i];
+  const origData = (plotOriginal[sourceDiv.id] && plotOriginal[sourceDiv.id].length) ? plotOriginal[sourceDiv.id] : sourceDiv.data;
+  for (let i = 0; i < origData.length; i++) {
+    const tr = origData[i];
     if (tr.visible === false) continue;
     if (sourceDiv.id === 'heatmapPlot' && tr.type === 'heatmap') { timeArray = tr.x; wlArray = tr.y; break; }
     if (sourceDiv.id === 'surfacePlot' && tr.type === 'surface') { timeArray = Array.isArray(tr.x) ? tr.x[0] : tr.x; wlArray = Array.isArray(tr.y[0]) ? tr.y.map(r => r[0]) : tr.y; break; }
