@@ -837,7 +837,7 @@ def download_plots():
             "function markActive(containerId,id){document.querySelectorAll('#'+containerId+' button').forEach(b=>{if(b.dataset.id===id)b.classList.add('active');else b.classList.remove('active');});}"
             "function applyBand(plotId,btnContainerId,band){const originalData=originals[plotId];const layout=layouts[plotId];if(!band){Plotly.react(plotId,originalData,layout);markActive(btnContainerId,'__full__');return;}const newData=[];"
             "for(const tr of originalData){if(tr.type==='surface'||tr.type==='heatmap'){let yvec=tr.y;if(Array.isArray(yvec[0]))yvec=yvec.map(r=>r[0]);const z=tr.z;const inZ=[],outZ=[];"
-            "for(let i=0;i<z.length;i++){const inBand=yvec[i]>=band.start&&yv[i]<=band.end;const row=z[i];inZ[i]=inBand?row.slice():new Array(row.length).fill(NaN);outZ[i]=inBand?new Array(row.length).fill(NaN):row.slice();}"
+            "for(let i=0;i<z.length;i++){const inBand=yvec[i]>=band.start&&yvec[i]<=band.end;const row=z[i];inZ[i]=inBand?row.slice():new Array(row.length).fill(NaN);outZ[i]=inBand?new Array(row.length).fill(NaN):row.slice();}"
             "const base={};for(const k in tr)if(k!=='z')base[k]=tr[k];newData.push(Object.assign({},base,{z:inZ}));newData.push(Object.assign({},base,{z:outZ,showscale:false,opacity:0.35,colorscale:[[0,'#888'],[1,'#888']]}));}"
             "else{newData.push(tr);}}"
             "Plotly.react(plotId,newData,layout);markActive(btnContainerId,band.__id);}"
@@ -873,6 +873,7 @@ def download_plots():
             z.writestr(mp4_name, mp4_bytes)
     buf.seek(0)
     return send_file(buf, mimetype='application/zip', as_attachment=True, download_name='jwst_plots_' + ts + '.zip')
+
 
 @app.route('/upload_spectrum_frames', methods=['POST'])
 def upload_spectrum_frames():

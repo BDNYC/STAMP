@@ -172,14 +172,14 @@
                 Process MAST Data
             </button>
 
-            <!-- NEW: built-in determinate progress area (hidden until used) -->
+
             <div id="progressWrap" class="mt-4 hidden">
                 <div class="w-full h-2 bg-gray-700 rounded overflow-hidden">
                     <div id="progressInner" class="h-2 bg-blue-500" style="width:0%"></div>
                 </div>
                 <p id="progressMsg" class="text-xs mt-2 text-gray-400"></p>
             </div>
-            <!-- /progress -->
+
         </div>
 
         <div id="plotsContainer" class="hidden">
@@ -196,7 +196,7 @@
                         </label>
                     </div>
                     <p class="text-xs text-gray-400 mb-2">When enabled, click on any point to view spectrum at that time</p>
-                    <!-- Slightly taller + square -->
+
                     <div id="surfacePlot" class="square-plot" style="width: 100%; height: 640px; margin: 0 auto;"></div>
                     <div class="mt-3 flex flex-wrap items-center gap-2">
                         <div id="surfaceBandButtons" class="flex flex-wrap items-center gap-2"></div>
@@ -216,13 +216,13 @@
                         <span id="spectrumInfo" class="text-gray-300"></span>
                         <button id="nextSpectrumBtn" class="px-4 py-2 bg-blue-600 text-gray-100 rounded-md hover:bg-blue-700 transition duration-200">Next →</button>
                     </div>
-                    <!-- Slightly taller to match JS update -->
+
                     <div id="spectrumPlot" style="width: 100%; height: 480px; margin: 0 auto;"></div>
                     <div class="mt-3 flex flex-wrap items-center gap-2">
                         <div id="spectrumBandButtons" class="flex flex-wrap items-center gap-2"></div>
                     </div>
                     <div class="flex items-center justify-center mt-4 space-x-4">
-                        <!-- Toggle between vs_wavelength and vs_time -->
+
                         <button id="toggleSpectrumModeBtn" class="px-4 py-2 bg-gray-700 text-gray-100 rounded-md hover:bg-gray-600 transition duration-200">X-axis: Wavelength</button>
                         <button id="playAnimationBtn" class="px-4 py-2 bg-green-600 text-gray-100 rounded-md hover:bg-green-700 transition duration-200">▶ Play</button>
                         <label class="text-sm text-gray-300 flex items-center">
