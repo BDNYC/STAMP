@@ -300,14 +300,14 @@ function computeLockedRibbonRange(spec, bands) {
       const e = E[i] && E[i][j];
       if (v == null || e == null || isNaN(v) || isNaN(e)) continue;
       // Errors are already converted to % by the backend when in variability mode
-let s = e;
+      const s = e;
       const up = v + s;
       const lo = v - s;
       if (isFinite(up) && up > maxV) maxV = up;
       if (isFinite(lo) && lo < minV) minV = lo;
     }
   }
-  if (!isFinite(minV) || !isFinite(maxV)) return null;
+  if (! isFinite(minV) || !isFinite(maxV)) return null;
   const pad = (maxV - minV) * 0.03 || 1e-6;
   return [minV - pad, maxV + pad];
 }
@@ -348,6 +348,10 @@ function toggleSpectrumMode() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+  // Initialize demo data first
+  initializeDemoData();
+  setupDemoDataHandlers();
+
   document.getElementById('addBandBtn').addEventListener('click', () => addCustomBand());
   document.getElementById('uploadMastBtn').addEventListener('click', uploadMastDirectory);
   document.getElementById('resetSurfaceViewBtn').addEventListener('click', () => resetPlotView('surfacePlot'));
@@ -368,7 +372,6 @@ document.addEventListener('DOMContentLoaded', function() {
   const tsm = document.getElementById('toggleSpectrumModeBtn');
   if (tsm) tsm.addEventListener('click', toggleSpectrumMode);
 });
-
 const colorScales = [
   { name: 'Viridis',   class: 'viridis' },
   { name: 'Plasma',    class: 'plasma' },
@@ -553,10 +556,21 @@ function fmtETA(s) {
 }
 
 async function uploadMastDirectory() {
-  const mastZipFile = document.getElementById('mastZipFile').files[0];
-  if (!mastZipFile) { alert('Please select a MAST ZIP file before processing.'); return; }
   const formData = new FormData();
-  formData.append('mast_zip', mastZipFile);
+
+  // Check if demo data is selected or user file
+  if (window.isDemoDataSelected) {
+    // User wants to process demo data
+    formData.append('use_demo', 'true');
+  } else {
+    // User uploaded their own file
+    if (! window.selectedFile) {
+      alert('Please select a file or use the demo dataset.');
+      return;
+    }
+    formData.append('mast_zip', window.selectedFile);
+  }
+
   const selectedColorscale = document.querySelector('.colorscale-option.selected');
   if (!selectedColorscale) { alert('Please select a color scale.'); return; }
   formData.append('colorscale', selectedColorscale.getAttribute('data-colorscale'));
@@ -581,7 +595,7 @@ async function uploadMastDirectory() {
   const customBands = Array.from(document.getElementById('customBands').children).map(band => {
     const inputs = band.querySelectorAll('input');
     return { name: inputs[0].value.trim(), start: parseFloat(inputs[1].value), end: parseFloat(inputs[2].value) };
-  }).filter(b => b.name && !isNaN(b.start) && !isNaN(b.end));
+  }).filter(b => b.name && ! isNaN(b.start) && !isNaN(b.end));
   formData.append('custom_bands', JSON.stringify(customBands));
 
   activeBands = [];
@@ -590,7 +604,7 @@ async function uploadMastDirectory() {
   window.__referenceSpectrum = null;
 
   window.__userRanges = {
-    timeRangeMin: timeRangeMin || null,
+    timeRangeMin:  timeRangeMin || null,
     timeRangeMax: timeRangeMax || null,
     wavelengthRangeMin: wavelengthRangeMin || null,
     wavelengthRangeMax: wavelengthRangeMax || null
@@ -603,7 +617,7 @@ async function uploadMastDirectory() {
   showProgress('Queued…');
 
   try {
-    const startRes = await fetch('/start_mast', { method: 'POST', body: formData });
+    const startRes = await fetch('/start_mast', { method: 'POST', body:  formData });
     if (!startRes.ok) { const t = await startRes.text(); throw new Error(`HTTP ${startRes.status}: ${t}`); }
     const startData = await startRes.json();
     if (!startData.job_id) throw new Error('No job id returned');
@@ -620,7 +634,7 @@ async function uploadMastDirectory() {
           const proc = typeof p.processed_integrations === 'number' ? p.processed_integrations : null;
           const tot = typeof p.total_integrations === 'number' ? p.total_integrations : null;
           const baseMsg = p.message || '';
-          let main = stageLabel ? `${stageLabel} — ${baseMsg}` : baseMsg;
+          let main = stageLabel ?  `${stageLabel} — ${baseMsg}` : baseMsg;
           let stats = '';
           if (tot && proc != null) stats += `${proc}/${tot} integrations`;
           if (p.throughput && isFinite(p.throughput)) stats += (stats ? ' • ' : '') + `${p.throughput.toFixed(1)}/s`;
@@ -658,7 +672,7 @@ async function uploadMastDirectory() {
     const heatmapData = JSON.parse(data.heatmap_plot);
 
     function centerPlot(fig) {
-      const m = { l: 120, r: 120, t: 60, b: 50 };
+      const m = { l: 120, r: 120, t:  60, b: 50 };
       fig.layout = fig.layout || {};
       fig.layout.margin = { l: m.l, r: m.r, t: m.t, b: m.b };
       if (fig.layout.scene) { fig.layout.scene.domain = { x: [0,1], y: [0,1] }; }
@@ -674,8 +688,8 @@ async function uploadMastDirectory() {
       });
       if (Array.isArray(fig.data)) {
         fig.data.forEach(t => {
-          if (!t.coloraxis && (t.type === 'surface' || t.type === 'heatmap')) {
-            t.colorbar = { ...(t.colorbar || {}), x: 1, xanchor: 'left', xpad: m.r - 40, y: 0.5, yanchor: 'middle', len: 0.85 };
+          if (! t.coloraxis && (t.type === 'surface' || t.type === 'heatmap')) {
+            t.colorbar = { ...(t.colorbar || {}), x: 1, xanchor: 'left', xpad:  m.r - 40, y: 0.5, yanchor: 'middle', len:  0.85 };
           }
         });
       }
@@ -999,7 +1013,7 @@ function updateSpectrumPlot() {
     }
     xAxisTitle = 'Wavelength (µm)';
     xValues = wavelengths;
-    infoPrimary = `Spectrum at Time:  ${currentTime. toFixed(2)} hours`;
+    infoPrimary = `Spectrum at Time:  ${currentTime.toFixed(2)} hours`;
     infoIndex = currentTimeIndex + 1;
     infoTotal = totalTimePoints;
   } else {
@@ -1007,7 +1021,7 @@ function updateSpectrumPlot() {
     if (activeBands && activeBands.length >= 1) {
       xAxisTitle = 'Time (hours)';
       xValues = timeArray;
-      infoPrimary = activeBands. length === 1 ? `Band-integrated series:  ${activeBands[0]. name} (${activeBands[0]. start.toFixed(2)}–${activeBands[0].end.toFixed(2)} µm)` : `Band-integrated series (${activeBands.length} bands)`;
+      infoPrimary = activeBands.length === 1 ? `Band-integrated series:  ${activeBands[0].name} (${activeBands[0].start.toFixed(2)}–${activeBands[0].end.toFixed(2)} µm)` : `Band-integrated series (${activeBands.length} bands)`;
       infoIndex = 1;
       infoTotal = 1;
       currentSpectrumData.bandAveraged = true;
@@ -1033,11 +1047,11 @@ function updateSpectrumPlot() {
   let yAxisLabel, hoverFormat, yTickFormat;
   if (currentSpectrumData.zAxisDisplay === 'flux') {
     yAxisLabel = 'Flux';
-    hoverFormat = '. 2e';
-    yTickFormat = '. 2e';
+    hoverFormat = '.2e';
+    yTickFormat = '.2e';
   } else {
     yAxisLabel = 'Variability (%)';
-    hoverFormat = '. 4f';
+    hoverFormat = '.4f';
     yTickFormat = '.4~f';
   }
 
@@ -1052,7 +1066,7 @@ function updateSpectrumPlot() {
       gridcolor: '#555555',
       linecolor: '#555555',
       zeroline: false,
-      range: currentSpectrumData.lockedRibbonRange ?  currentSpectrumData.lockedRibbonRange : [currentSpectrumData.globalMin, currentSpectrumData. globalMax],
+      range: currentSpectrumData.lockedRibbonRange ?  currentSpectrumData.lockedRibbonRange : [currentSpectrumData.globalMin, currentSpectrumData.globalMax],
       tickformat: yTickFormat
     },
     margin: { l: 60, r: 40, t: 40, b:  60 },
@@ -1075,7 +1089,7 @@ function updateSpectrumPlot() {
 
   if (spectrumMode === 'vs_wavelength') {
     if (activeBands && activeBands.length > 0) {
-      const inMask = xValues.map((w) => activeBands.some(b => w >= b.start && w <= b. end));
+      const inMask = xValues.map((w) => activeBands.some(b => w >= b.start && w <= b.end));
       const inY = values.map((v, i) => inMask[i] ? v :  NaN);
 
       const baseTrace = {
@@ -1143,7 +1157,7 @@ function updateSpectrumPlot() {
       if (showErrors) {
         const sigma = sigmaFor(values, errors);
         traces.push(
-          { x: xValues, y: values. map((v, i) => (isFinite(v) && isFinite(sigma[i])) ? v + sigma[i] : null), type: 'scatter', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false, connectgaps:  false },
+          { x: xValues, y: values.map((v, i) => (isFinite(v) && isFinite(sigma[i])) ? v + sigma[i] : null), type: 'scatter', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false, connectgaps:  false },
           { x: xValues, y: values.map((v, i) => (isFinite(v) && isFinite(sigma[i])) ? v - sigma[i] : null), type: 'scatter', mode: 'lines', fill: 'tonexty', fillcolor: 'rgba(239, 68, 68, 0.20)', line: { width: 0 }, hoverinfo:  'skip', showlegend:  false, connectgaps: false }
         );
       }
@@ -1170,7 +1184,7 @@ function updateSpectrumPlot() {
       function hexToRgba(hex, a) {
         const h = hex.replace('#', '');
         const r = parseInt(h.substring(0, 2), 16);
-        const g = parseInt(h. substring(2, 4), 16);
+        const g = parseInt(h.substring(2, 4), 16);
         const b = parseInt(h.substring(4, 6), 16);
         return `rgba(${r}, ${g}, ${b}, ${a})`;
       }
@@ -1226,7 +1240,7 @@ function updateSpectrumPlot() {
         if (! currentSpectrumData.useInterpolation) {
           segs.forEach(([a, bb], si) => {
             const xSeg = timeArray.slice(a, bb + 1);
-            const ySeg = y. slice(a, bb + 1);
+            const ySeg = y.slice(a, bb + 1);
             const eSeg = eArr.slice(a, bb + 1);
 
             traces.push({
@@ -1355,7 +1369,7 @@ function updateSpectrumPlot() {
         let s = 0;
         for (let i = 1; i < xValuesTime.length; i++) {
           if ((xValuesTime[i] - xValuesTime[i - 1]) > gapThresholdHours) {
-            segs. push([s, i - 1]);
+            segs.push([s, i - 1]);
             s = i;
           }
         }
@@ -1377,7 +1391,7 @@ function updateSpectrumPlot() {
           });
 
           if (showErrors) {
-            const sigmaSeg = sigmaFor(ySeg, errors. slice(a, b + 1), currentWavelengthIndex);
+            const sigmaSeg = sigmaFor(ySeg, errors.slice(a, b + 1), currentWavelengthIndex);
             const upperSeg = ySeg.map((v, i) => (isFinite(v) && isFinite(sigmaSeg[i])) ? v + sigmaSeg[i] : null);
             const lowerSeg = ySeg.map((v, i) => (isFinite(v) && isFinite(sigmaSeg[i])) ? v - sigmaSeg[i] : null);
             traces.push(
@@ -1424,7 +1438,7 @@ function updateSpectrumPlot() {
     }
   }
 
-  if (spectrumMode === 'vs_time' && activeBands. length > 0) {
+  if (spectrumMode === 'vs_time' && activeBands.length > 0) {
     document.getElementById('prevSpectrumBtn').disabled = true;
     document.getElementById('nextSpectrumBtn').disabled = true;
     document.getElementById('playAnimationBtn').disabled = true;
@@ -1626,5 +1640,98 @@ async function downloadAllWithVideo(e) {
     alert(err.message || 'Failed to prepare video download.');
   } finally {
     if (link && originalText) { link.textContent = originalText; link.classList.remove('opacity-70'); }
+  }
+}
+
+
+function initializeDemoData() {
+  // Set demo as initially selected
+  window.isDemoDataSelected = true;
+  window.selectedFile = null;
+
+  // Update the display
+  updateFileDisplay();
+
+  console.log('Demo dataset initialized:  demo_jwst_timeseries.zip');
+}
+
+function updateFileDisplay() {
+  const fileNameEl = document.getElementById('fileName');
+  const fileDisplayEl = document.getElementById('fileDisplay');
+
+  if (!fileNameEl || !fileDisplayEl) {
+    console.warn('File display elements not found');
+    return;
+  }
+
+  if (window.isDemoDataSelected) {
+    // Show demo dataset
+    fileNameEl.innerHTML = '📁 demo_jwst_timeseries.zip <span class="text-xs text-blue-400 ml-2">(Demo Dataset)</span>';
+    fileDisplayEl.classList.add('border-blue-500', 'bg-blue-900/20');
+    fileDisplayEl.classList.remove('border-gray-600');
+  } else if (window.selectedFile) {
+    // Show user-uploaded file
+    fileNameEl.innerHTML = `📁 ${window.selectedFile.name}`;
+    fileDisplayEl.classList.remove('border-blue-500', 'bg-blue-900/20');
+    fileDisplayEl.classList.add('border-gray-600');
+  } else {
+    // No file selected (fallback)
+    fileNameEl.innerHTML = '📁 No file selected';
+    fileDisplayEl.classList.remove('border-blue-500', 'bg-blue-900/20');
+    fileDisplayEl.classList.add('border-gray-600');
+  }
+}
+
+
+function setupDemoDataHandlers() {
+  // Handle "Choose your own file" button click
+  const changeFileBtn = document.getElementById('changeFileBtn');
+  if (changeFileBtn) {
+    changeFileBtn.addEventListener('click', () => {
+      const mastFile = document.getElementById('mastZipFile');
+      if (mastFile) {
+        mastFile.click();
+      }
+    });
+  }
+
+  // Handle actual file input change
+  const mastFileInput = document.getElementById('mastZipFile');
+  if (mastFileInput) {
+    mastFileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        window.selectedFile = e.target.files[0];
+        window.isDemoDataSelected = false;
+        updateFileDisplay();
+        console.log('User file selected:', window.selectedFile.name);
+      }
+    });
+  }
+
+  // Handle clicking on the file display area to change file
+  const fileDisplay = document.getElementById('fileDisplay');
+  if (fileDisplay) {
+    fileDisplay.addEventListener('click', () => {
+      const mastFile = document.getElementById('mastZipFile');
+      if (mastFile) {
+        mastFile.click();
+      }
+    });
+  }
+
+  // Handle clicking "back to demo" if user wants to revert
+  const useDemoBtn = document.getElementById('useDemoBtn');
+  if (useDemoBtn) {
+    useDemoBtn.addEventListener('click', () => {
+      window.isDemoDataSelected = true;
+      window.selectedFile = null;
+      // Clear the file input
+      const mastFile = document.getElementById('mastZipFile');
+      if (mastFile) {
+        mastFile.value = '';
+      }
+      updateFileDisplay();
+      console.log('Reverted to demo dataset');
+    });
   }
 }

@@ -1200,13 +1200,34 @@ def _run_mast_job(job_id, zip_path, form_args):
             pass
 
 
-
 @app.route('/start_mast', methods=['POST'])
 def start_mast():
     try:
-        mast_file = request.files.get('mast_zip')
-        if not mast_file or mast_file.filename == '':
-            return jsonify({'error': 'No MAST zip file provided.'}), 400
+        # Check if demo data is requested
+        use_demo = request.form.get('use_demo', 'false').lower() == 'true'
+
+        if use_demo:
+            # Use demo dataset
+            demo_zip = os.path.join(BASE_DIR, 'static', 'demo_data', 'demo_jwst_timeseries.zip')
+
+            if not os.path.exists(demo_zip):
+                return jsonify({'error': 'Demo dataset not found.  Please upload your own data.'}), 404
+
+
+            tmp_zip = os.path.join(tempfile.gettempdir(), f"mast_demo_{uuid.uuid4().hex}.zip")
+            shutil.copy2(demo_zip, tmp_zip)
+            logger.info(f"Using demo dataset:  {demo_zip}")
+        else:
+            # Use uploaded file
+            mast_file = request.files.get('mast_zip')
+            if not mast_file or mast_file.filename == '':
+                return jsonify({'error': 'No MAST zip file provided. '}), 400
+
+            tmp_zip = os.path.join(tempfile.gettempdir(), f"mast_job_{uuid.uuid4().hex}.zip")
+            mast_file.save(tmp_zip)
+            logger.info(f"Processing uploaded file: {mast_file.filename}")
+
+        # Parse form parameters (same for both demo and uploaded)
         custom_bands_json = request.form.get('custom_bands', '[]')
         try:
             custom_bands = json.loads(custom_bands_json)
@@ -1237,8 +1258,8 @@ def start_mast():
             v_min = float(variability_range_min) if variability_range_min else None
             v_max = float(variability_range_max) if variability_range_max else None
             variability_range = (v_min, v_max)
-        tmp_zip = os.path.join(tempfile.gettempdir(), f"mast_job_{uuid.uuid4().hex}.zip")
-        mast_file.save(tmp_zip)
+
+        # Start background job (same for both demo and uploaded)
         job_id = uuid.uuid4().hex
         _progress_set(job_id, reset=True, percent=1.0, message="Queued…", stage="queued")
         form_args = {

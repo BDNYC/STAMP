@@ -7,68 +7,101 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
-        .colorscale-option {
-            width: 40px;
-            height: 40px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: 2px solid transparent;
-        }
-        .colorscale-option:hover {
-            transform: scale(1.1);
-            border-color: #3B82F6;
-        }
-        .colorscale-option.selected {
-            border-color: #3B82F6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
-        }
-        .viridis { background: linear-gradient(to right, #440154, #31688e, #35b779, #fde725); }
-        .plasma { background: linear-gradient(to right, #0d0887, #7e03a8, #cc4778, #f89540, #f0f921); }
-        .inferno { background: linear-gradient(to right, #000004, #420a68, #932667, #dd513a, #fcffa4); }
-        .magma { background: linear-gradient(to right, #000004, #3b0f70, #8c2981, #de4968, #fcfdbf); }
-        .cividis { background: linear-gradient(to right, #00204d, #414487, #7a7e7d, #b9b665, #ffea46); }
-        .turbo { background: linear-gradient(to right, #30123b, #4454c4, #42be71, #f1d626, #7a0403); }
-        .spectral { background: linear-gradient(to right, #9e0142, #f46d43, #fee08b, #abdda4, #5e4fa2); }
-        .rdylbu { background: linear-gradient(to right, #a50026, #f46d43, #fee090, #abd9e9, #313695); }
-        .picnic { background: linear-gradient(to right, #0000ff, #3399ff, #66ccff, #99ffff, #ccffff, #ffffff, #ffccff, #ff99ff, #ff66cc, #ff3399, #ff0000); }
+    .colorscale-option {
+        width: 40px;
+        height: 40px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border: 2px solid transparent;
+    }
+    .colorscale-option:hover {
+        transform: scale(1.1);
+        border-color: #3B82F6;
+    }
+    .colorscale-option.selected {
+        border-color:   #3B82F6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+    }
+    .viridis { background: linear-gradient(to right, #440154, #31688e, #35b779, #fde725); }
+    .plasma { background: linear-gradient(to right, #0d0887, #7e03a8, #cc4778, #f89540, #f0f921); }
+    .inferno { background: linear-gradient(to right, #000004, #420a68, #932667, #dd513a, #fcffa4); }
+    .magma { background: linear-gradient(to right, #000004, #3b0f70, #8c2981, #de4968, #fcfdbf); }
+    .cividis { background: linear-gradient(to right, #00204d, #414487, #7a7e7d, #b9b665, #ffea46); }
+    .turbo { background: linear-gradient(to right, #30123b, #4454c4, #42be71, #f1d626, #7a0403); }
+    .spectral { background: linear-gradient(to right, #9e0142, #f46d43, #fee08b, #abdda4, #5e4fa2); }
+    .rdylbu { background: linear-gradient(to right, #a50026, #f46d43, #fee090, #abd9e9, #313695); }
+    .picnic { background: linear-gradient(to right, #0000ff, #3399ff, #66ccff, #99ffff, #ccffff, #ffffff, #ffccff, #ff99ff, #ff66cc, #ff3399, #ff0000); }
 
-        /* Slightly taller overall plots container */
-        #plotsContainer { min-height: 680px; }
+    #plotsContainer { min-height: 680px; }
 
-        .plot-wrapper {
-            background-color: rgba(31, 41, 55, 0.5);
-            border-radius: 8px;
-            padding: 1rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            max-width: calc(100vw - 12rem);
-            margin-left: auto;
-            margin-right: auto;
-        }
-        .metadata-info-custom,
-        .plots-title-custom {
-            max-width: calc(100vw - 12rem);
-            margin-left: auto;
-            margin-right: auto;
-        }
-        .plots-title-custom { padding-left: 0.75rem; }
-        .checkbox-container { display: flex; align-items: center; }
-        .checkbox-container input[type="checkbox"] {
-            width: 1.25rem; height: 1.25rem; background-color: #374151; border-color: #4B5563;
-            border-radius: 0.25rem; cursor: pointer;
-        }
-        .checkbox-container input[type="checkbox"]:checked { background-color: #3B82F6; border-color: #3B82F6; }
-        .checkbox-container label { margin-left: 0.5rem; cursor: pointer; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-        #spectrumContainer { transition: all 0.3s ease-in-out; }
-        .range-inputs { display: flex; gap: 0.5rem; align-items: center; }
-        .range-inputs input { flex: 1; }
-        .range-separator { color: #9CA3AF; font-weight: 500; }
-        #surfacePlot .modebar, #heatmapPlot .modebar, #spectrumPlot .modebar { left: auto !important; right: 0 !important; transform: none !important; justify-content: flex-end !important; }
+    .plot-wrapper {
+        background-color: rgba(31, 41, 55, 0.5);
+        border-radius: 8px;
+        padding: 1rem;
+        box-shadow:  0 4px 6px rgba(0, 0, 0, 0.1);
+        max-width: calc(100vw - 12rem);
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .metadata-info-custom,
+    .plots-title-custom {
+        max-width: calc(100vw - 12rem);
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .plots-title-custom { padding-left: 0.75rem; }
+    .checkbox-container { display: flex; align-items:   center; }
+    .checkbox-container input[type="checkbox"] {
+        width: 1.25rem;
+        height: 1.25rem;
+        background-color: #374151;
+        border-color: #4B5563;
+        border-radius: 0.25rem;
+        cursor: pointer;
+    }
+    .checkbox-container input[type="checkbox"]:checked {
+        background-color: #3B82F6;
+        border-color: #3B82F6;
+    }
+    .checkbox-container label {
+        margin-left: 0.5rem;
+        cursor: pointer;
+    }
+    button: disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    #spectrumContainer {
+        transition: all 0.3s ease-in-out;
+    }
+    .range-inputs {
+        display: flex;
+        gap: 0.5rem;
+        align-items:   center;
+        width: 100%;
+    }
+    .range-inputs input {
+        flex:   1;
+        min-width: 0;
+    }
+    .range-separator {
+        color: #9CA3AF;
+        font-weight: 500;
+        flex-shrink: 0;
+        padding: 0 0.5rem;
+    }
+    #surfacePlot .modebar,
+    #heatmapPlot .modebar,
+    #spectrumPlot .modebar {
+        left: auto ! important;
+        right: 0 !important;
+        transform: none !important;
+        justify-content: flex-end !important;
+    }
 
-        /* Ensure square plot areas for surface & heatmap */
-        .square-plot { aspect-ratio: 1 / 1; }
-    </style>
+    .square-plot { aspect-ratio: 1 / 1; }
+</style>
 </head>
 <body class="bg-gray-900 text-gray-100">
     <div class="w-full px-4 py-8">
@@ -79,107 +112,177 @@
         </div>
         <div class="text-center text-blue-200 text-sm mb-8">The American Museum of Natural History</div>
 
-        <div class="max-w-4xl mx-auto bg-gray-800 rounded-lg shadow-xl p-6 mb-8">
-            <h2 class="text-2xl font-semibold mb-6 text-blue-300">Upload MAST Data</h2>
-            <div class="mb-6">
-                <label class="block text-sm font-medium mb-2 text-gray-300">MAST ZIP File</label>
-                <input type="file" id="mastZipFile" accept=".zip"
-                       class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100
-                              file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0
-                              file:text-sm file:font-semibold file:bg-blue-600 file:text-gray-100
-                              hover:file:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            </div>
-            <div class="mb-6">
-                <div class="checkbox-container">
-                    <input type="checkbox" id="linearInterpolation" class="focus:ring-2 focus:ring-blue-500">
-                    <label for="linearInterpolation" class="text-sm font-medium text-gray-300">Enable Linear Interpolation (fills gaps in data)</label>
-                </div>
-                <p class="mt-1 text-xs text-gray-500">When enabled, gaps between visits will be filled with interpolated data</p>
-            </div>
-            <div class="mb-6">
-                <label class="block text-sm font-medium mb-2 text-gray-300">Number of Integrations to Plot</label>
-                <input type="number" id="numIntegrations" min="1" value="1000"
-                       class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100
-                              focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <p class="mt-1 text-xs text-gray-500">Limit the number of integrations plotted (evenly sampled). Leave empty or set higher than total to plot all.</p>
-            </div>
-            <div class="mb-6">
-                <h3 class="text-lg font-medium mb-3 text-blue-300">Z-axis Display</h3>
-                <div class="space-y-2">
-                    <label class="flex items-center cursor-pointer">
-                        <input type="radio" name="zAxisDisplay" value="variability" checked
-                               class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 focus:ring-blue-500">
-                        <span class="ml-2 text-sm font-medium text-gray-300">Variability (%)</span>
-                    </label>
-                    <label class="flex items-center cursor-pointer">
-                        <input type="radio" name="zAxisDisplay" value="flux"
-                               class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 focus:ring-blue-500">
-                        <span class="ml-2 text-sm font-medium text-gray-300">Raw Flux</span>
-                    </label>
-                </div>
-                <p class="mt-2 text-xs text-gray-500">Choose whether to display flux variability as percentage or raw flux values</p>
-            </div>
-            <div class="mb-6 space-y-4">
-                <h3 class="text-lg font-medium text-blue-300">Data Ranges</h3>
-                <div>
-                    <label class="block text-sm font-medium mb-2 text-gray-300">Time Range (hours)</label>
-                    <div class="range-inputs">
-                        <input type="number" id="timeRangeMin" step="0.1" placeholder="Min"
-                               class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <span class="range-separator">to</span>
-                        <input type="number" id="timeRangeMax" step="0.1" placeholder="Max"
-                               class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <div class="relative flex justify-center">
+    <!-- LEFT COLUMN - Data Requirements (absolutely positioned) -->
+    <div class="absolute left-0 top-0 flex justify-center" style="width: calc((100vw - 64rem) / 2); max-width: 400px;">
+        <details class="bg-gray-700/50 border border-gray-600 rounded-lg w-64">
+                    <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-blue-300 hover:bg-gray-700/70 transition rounded-lg">
+                        📋 Data Requirements
+                    </summary>
+                    <div class="px-4 py-3 text-sm text-gray-300 space-y-2">
+                        <p class="font-semibold text-blue-200">Required File Format:</p>
+                        <ul class="list-disc list-outside space-y-1 ml-2">
+                            <li>ZIP folder containing file(s) ending in x1dints.fits or . h5</li>
+                        </ul>
+
+                        <p class="font-semibold text-blue-200 mt-3">Required Data Columns:</p>
+                        <p class="text-xs italic text-gray-400">For FITS files:</p>
+                        <ul class="list-disc list-outside space-y-1 ml-2 text-xs">
+                            <li>INT_TIMES table with int_mid_MJD_UTC (observation times)</li>
+                            <li>EXTRACT1D extension with: WAVELENGTH, FLUX, and optionally FLUX_ERROR</li>
+                        </ul>
+
+                        <p class="text-xs italic text-gray-400 mt-2">For H5 files:</p>
+                        <ul class="list-disc list-outside space-y-1 ml-2 text-xs">
+                            <li><strong>Flux:</strong> calibrated_optspec, stdspec, or optspec</li>
+                            <li><strong>Wavelength:</strong> eureka_wave_1d, wave_1d, wavelength, or wave</li>
+                            <li><strong>Time:</strong> time, bmjd, mjd, or bjd</li>
+                            <li><strong>Errors (optional):</strong>calibrated_opterr, stdvar,error, or flux_error</li>
+                        </ul>
+
+                        <p class="text-xs text-gray-400 mt-3"><em>Note: Target name, instrument info, and other metadata are optional.</em></p>
                     </div>
-                    <p class="mt-1 text-xs text-gray-500">Specify the time range to display. Leave empty for full range.</p>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-2 text-gray-300">Wavelength Range (µm)</label>
-                    <div class="range-inputs">
-                        <input type="number" id="wavelengthRangeMin" step="0.01" placeholder="Min"
-                               class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <span class="range-separator">to</span>
-                        <input type="number" id="wavelengthRangeMax" step="0.01" placeholder="Max"
-                               class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
-                    <p class="mt-1 text-xs text-gray-500">Specify the wavelength range to display. Leave empty for full range.</p>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-2 text-gray-300">Z-axis Range</label>
-                    <div class="range-inputs">
-                        <input type="number" id="variabilityRangeMin" step="0.1" placeholder="Min"
-                               class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <span class="range-separator">to</span>
-                        <input type="number" id="variabilityRangeMax" step="0.1" placeholder="Max"
-                               class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
-                    <p class="mt-1 text-xs text-gray-500">Set the Z-axis range. For variability: enter %, for flux: enter actual values. Leave empty for automatic range.</p>
-                </div>
+                </details>
             </div>
-            <div class="mb-6">
-                <label class="block text-sm font-medium mb-2 text-gray-300">Color Scale</label>
-                <div id="colorscaleSelector" class="flex flex-wrap gap-2"></div>
-            </div>
-            <div class="mb-6">
-                <h3 class="text-lg font-medium mb-3 text-blue-300">Custom Bands</h3>
-                <div id="customBands" class="mb-3"></div>
-                <button id="addBandBtn"
-                        class="px-4 py-2 bg-green-600 text-gray-100 rounded-md hover:bg-green-700 transition duration-200">
-                    Add Band
+
+            <!-- CENTER COLUMN - Main Form (truly centered) -->
+            <div class="max-w-4xl mx-auto bg-gray-800 rounded-lg shadow-xl p-6">
+                <h2 class="text-2xl font-semibold mb-6 text-blue-300">Upload MAST Data</h2>
+
+                <!-- Demo Data Info Banner -->
+                <div class="mb-4 p-3 bg-blue-900/30 border border-blue-700/50 rounded-lg">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                        </svg>
+                        <p class="text-sm text-blue-200">
+                            <strong>Demo dataset preloaded:</strong> JWST Program GO 3548 courtesy of Johanna Vos.
+                            Click "Process MAST Data" to explore or choose your own file below.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- File Selection with Demo -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium mb-2 text-gray-300">MAST ZIP File</label>
+
+                    <!-- Hidden actual file input -->
+                    <input type="file" id="mastZipFile" accept=".zip" style="display: none;">
+
+                    <!-- Custom file display -->
+                    <div id="fileDisplay" class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 cursor-pointer hover:bg-gray-600 transition duration-200">
+                        <span id="fileName">📁 demo_jwst_timeseries.zip</span>
+                    </div>
+
+                    <!-- Change file button -->
+                    <button type="button" id="changeFileBtn"
+                            class="mt-2 text-sm text-blue-400 hover:text-blue-300 transition duration-200">
+                        📂 Choose your own file
+                    </button>
+
+                    <!-- Optional: Back to demo button (only shows when user has selected a file) -->
+                    <button type="button" id="useDemoBtn" style="display: none;"
+                            class="mt-2 ml-4 text-sm text-green-400 hover:text-green-300 transition duration-200">
+                        ↩️ Use demo dataset
+                    </button>
+
+                    <p class="mt-2 text-xs text-gray-500">
+                        Demo data is preloaded.  Click "Choose your own file" to upload your data, or use demo to explore STAMP's features.
+                    </p>
+                </div>
+
+                <div class="mb-6">
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="linearInterpolation" class="focus:ring-2 focus:ring-blue-500">
+                        <label for="linearInterpolation" class="text-sm font-medium text-gray-300">Enable Linear Interpolation (fills gaps in data)</label>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500">When enabled, gaps between visits will be filled with interpolated data</p>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium mb-2 text-gray-300">Number of Integrations to Plot</label>
+                    <input type="number" id="numIntegrations" min="1" value="1000"
+                           class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100
+                                  focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <p class="mt-1 text-xs text-gray-500">Limit the number of integrations plotted (evenly sampled). Leave empty or set higher than total to plot all.   </p>
+                </div>
+                <div class="mb-6">
+                    <h3 class="text-lg font-medium mb-3 text-blue-300">Z-axis Display</h3>
+                    <div class="space-y-2">
+                        <label class="flex items-center cursor-pointer">
+                            <input type="radio" name="zAxisDisplay" value="variability" checked
+                                   class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 focus:ring-blue-500">
+                            <span class="ml-2 text-sm font-medium text-gray-300">Variability (%)</span>
+                        </label>
+                        <label class="flex items-center cursor-pointer">
+                            <input type="radio" name="zAxisDisplay" value="flux"
+                                   class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 focus:ring-blue-500">
+                            <span class="ml-2 text-sm font-medium text-gray-300">Raw Flux</span>
+                        </label>
+                    </div>
+                    <p class="mt-2 text-xs text-gray-500">Choose whether to display flux variability as percentage or raw flux values</p>
+                </div>
+                <div class="mb-6 space-y-4">
+                    <h3 class="text-lg font-medium text-blue-300">Data Ranges</h3>
+                    <div>
+                        <label class="block text-sm font-medium mb-2 text-gray-300">Time Range (hours)</label>
+                        <div class="range-inputs">
+                            <input type="number" id="timeRangeMin" step="0.1" placeholder="Min"
+                                   class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <span class="range-separator">to</span>
+                            <input type="number" id="timeRangeMax" step="0.1" placeholder="Max"
+                                   class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus: outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <p class="mt-1 text-xs text-gray-500">Specify the time range to display.   Leave empty for full range.   </p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2 text-gray-300">Wavelength Range (µm)</label>
+                        <div class="range-inputs">
+                            <input type="number" id="wavelengthRangeMin" step="0.01" placeholder="Min"
+                                   class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus: ring-2 focus:ring-blue-500">
+                            <span class="range-separator">to</span>
+                            <input type="number" id="wavelengthRangeMax" step="0.01" placeholder="Max"
+                                   class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <p class="mt-1 text-xs text-gray-500">Specify the wavelength range to display.  Leave empty for full range.  </p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2 text-gray-300">Z-axis Range</label>
+                        <div class="range-inputs">
+                            <input type="number" id="variabilityRangeMin" step="0.1" placeholder="Min"
+                                   class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus: ring-2 focus:ring-blue-500">
+                            <span class="range-separator">to</span>
+                            <input type="number" id="variabilityRangeMax" step="0.1" placeholder="Max"
+                                   class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <p class="mt-1 text-xs text-gray-500">Set the Z-axis range.   For variability:   enter %, for flux:  enter actual values.  Leave empty for automatic range.</p>
+                    </div>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium mb-2 text-gray-300">Color Scale</label>
+                    <div id="colorscaleSelector" class="flex flex-wrap gap-2"></div>
+                </div>
+                <div class="mb-6">
+                    <h3 class="text-lg font-medium mb-3 text-blue-300">Custom Bands</h3>
+                    <div id="customBands" class="mb-3"></div>
+                    <button id="addBandBtn"
+                            class="px-4 py-2 bg-green-600 text-gray-100 rounded-md hover:bg-green-700 transition duration-200">
+                        Add Band
+                    </button>
+                </div>
+                <button id="uploadMastBtn"
+                        class="w-full px-6 py-3 bg-blue-600 text-gray-100 rounded-md hover:bg-blue-700 transition duration-200 font-semibold text-lg">
+                    Process MAST Data
                 </button>
-            </div>
-            <button id="uploadMastBtn"
-                    class="w-full px-6 py-3 bg-blue-600 text-gray-100 rounded-md hover:bg-blue-700 transition duration-200 font-semibold text-lg">
-                Process MAST Data
-            </button>
 
 
-            <div id="progressWrap" class="mt-4 hidden">
-                <div class="w-full h-2 bg-gray-700 rounded overflow-hidden">
-                    <div id="progressInner" class="h-2 bg-blue-500" style="width:0%"></div>
+                <div id="progressWrap" class="mt-4 hidden">
+                    <div class="w-full h-2 bg-gray-700 rounded overflow-hidden">
+                        <div id="progressInner" class="h-2 bg-blue-500" style="width: 0%"></div>
+                    </div>
+                    <p id="progressMsg" class="text-xs mt-2 text-gray-400"></p>
                 </div>
-                <p id="progressMsg" class="text-xs mt-2 text-gray-400"></p>
-            </div>
 
+            </div>
         </div>
 
         <div id="plotsContainer" class="hidden">
@@ -197,7 +300,7 @@
                     </div>
                     <p class="text-xs text-gray-400 mb-2">When enabled, click on any point to view spectrum at that time</p>
 
-                    <div id="surfacePlot" class="square-plot" style="width: 100%; height: 640px; margin: 0 auto;"></div>
+                    <div id="surfacePlot" class="square-plot" style="width: 100%; height: 640px; margin:   0 auto;"></div>
                     <div class="mt-3 flex flex-wrap items-center gap-2">
                         <div id="surfaceBandButtons" class="flex flex-wrap items-center gap-2"></div>
                         <button id="resetSurfaceViewBtn" class="px-4 py-2 bg-gray-600 text-gray-100 rounded-md hover:bg-gray-700 transition duration-200">Reset View</button>
@@ -209,7 +312,7 @@
                         <h3 class="text-lg font-medium text-gray-200">
                             <span id="spectrumTitle">Spectrum at Time</span>
                         </h3>
-                        <button id="closeSpectrumBtn" class="px-3 py-1 bg-red-600 text-gray-100 rounded-md hover:bg-red-700 transition duration-200">Close</button>
+                        <button id="closeSpectrumBtn" class="px-3 py-1 bg-red-600 text-gray-100 rounded-md hover: bg-red-700 transition duration-200">Close</button>
                     </div>
                     <div class="flex items-center justify-center mb-3 space-x-4">
                         <button id="prevSpectrumBtn" class="px-4 py-2 bg-blue-600 text-gray-100 rounded-md hover:bg-blue-700 transition duration-200">← Previous</button>
@@ -217,13 +320,13 @@
                         <button id="nextSpectrumBtn" class="px-4 py-2 bg-blue-600 text-gray-100 rounded-md hover:bg-blue-700 transition duration-200">Next →</button>
                     </div>
 
-                    <div id="spectrumPlot" style="width: 100%; height: 480px; margin: 0 auto;"></div>
+                    <div id="spectrumPlot" style="width: 100%; height:   480px; margin:  0 auto;"></div>
                     <div class="mt-3 flex flex-wrap items-center gap-2">
                         <div id="spectrumBandButtons" class="flex flex-wrap items-center gap-2"></div>
                     </div>
                     <div class="flex items-center justify-center mt-4 space-x-4">
 
-                        <button id="toggleSpectrumModeBtn" class="px-4 py-2 bg-gray-700 text-gray-100 rounded-md hover:bg-gray-600 transition duration-200">X-axis: Wavelength</button>
+                        <button id="toggleSpectrumModeBtn" class="px-4 py-2 bg-gray-700 text-gray-100 rounded-md hover:bg-gray-600 transition duration-200">X-axis:   Wavelength</button>
                         <button id="playAnimationBtn" class="px-4 py-2 bg-green-600 text-gray-100 rounded-md hover:bg-green-700 transition duration-200">▶ Play</button>
                         <label class="text-sm text-gray-300 flex items-center">
                             Speed:
@@ -247,7 +350,7 @@
                     </div>
                     <p class="text-xs text-gray-400 mb-2">When enabled, click on any point to view spectrum at that time</p>
                     <!-- Slightly taller + square -->
-                    <div id="heatmapPlot" class="square-plot" style="width: 100%; height: 640px; margin: 0 auto;"></div>
+                    <div id="heatmapPlot" class="square-plot" style="width: 100%; height: 640px; margin:  0 auto;"></div>
                     <div class="mt-3 flex flex-wrap items-center gap-2">
                         <div id="heatmapBandButtons" class="flex flex-wrap items-center gap-2"></div>
                         <button id="resetHeatmapViewBtn" class="px-4 py-2 bg-gray-600 text-gray-100 rounded-md hover:bg-gray-700 transition duration-200">Reset View</button>
