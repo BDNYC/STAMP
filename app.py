@@ -1005,8 +1005,13 @@ def upload_mast():
         metadata['user_ranges'] = '; '.join(range_info) if range_info else None
         if z_axis_display == 'flux':
             z_data = flux_raw_2d_filtered
+            errors_for_plot = error_raw_2d_filtered
         else:
             z_data = flux_norm_2d_filtered
+            # Convert errors to variability percentage
+            median_per_wl = np.nanmedian(flux_raw_2d_filtered, axis=1, keepdims=True)
+            median_per_wl[median_per_wl == 0] = 1.0
+            errors_for_plot = (error_raw_2d_filtered / median_per_wl) * 100
         ref_spec = np.nanmedian(np.asarray(flux_raw_2d_filtered), axis=1)
         surface_plot = create_surface_plot_with_visits(
             z_data,
@@ -1021,7 +1026,7 @@ def upload_mast():
             z_range=variability_range,
             z_axis_display=z_axis_display,
             flux_unit=metadata.get('flux_unit', 'Unknown'),
-            errors_2d=error_raw_2d_filtered
+            errors_2d=errors_for_plot
         )
         heatmap_plot = create_heatmap_plot(
             z_data,
@@ -1124,9 +1129,19 @@ def _run_mast_job(job_id, zip_path, form_args):
             wavelength_1d_raw, flux_raw_2d_filtered, time_1d_raw = wavelength_1d, flux_raw_2d, time_1d
             wavelength_1d_err, error_raw_2d_filtered, time_1d_err = wavelength_1d, error_raw_2d, time_1d
         metadata['user_ranges'] = '; '.join(range_info) if range_info else None
-        z_data = flux_raw_2d_filtered if z_axis_display == 'flux' else flux_norm_2d_filtered
+        if z_axis_display == 'flux':
+            z_data = flux_raw_2d_filtered
+            errors_for_plot = error_raw_2d_filtered
+        else:
+            z_data = flux_norm_2d_filtered
+            # Convert errors to variability percentage
+            median_per_wl = np.nanmedian(flux_raw_2d_filtered, axis=1, keepdims=True)
+            median_per_wl[median_per_wl == 0] = 1.0
+            errors_for_plot = (error_raw_2d_filtered / median_per_wl) * 100
         ref_spec = np.nanmedian(np.asarray(flux_raw_2d_filtered), axis=1)
-        _progress_set(job_id, percent=95.0, message="Rendering plots…", stage="finalize", processed_integrations=_progress_set(job_id)["processed_integrations"], total_integrations=_progress_set(job_id)["total_integrations"])
+        _progress_set(job_id, percent=95.0, message="Rendering plots…", stage="finalize",
+                      processed_integrations=_progress_set(job_id)["processed_integrations"],
+                      total_integrations=_progress_set(job_id)["total_integrations"])
         surface_plot = create_surface_plot_with_visits(
             z_data,
             wavelength_1d_norm if z_axis_display != 'flux' else wavelength_1d_raw,
@@ -1140,7 +1155,7 @@ def _run_mast_job(job_id, zip_path, form_args):
             z_range=variability_range,
             z_axis_display=z_axis_display,
             flux_unit=metadata.get('flux_unit', 'Unknown'),
-            errors_2d=error_raw_2d_filtered
+            errors_2d=errors_for_plot
         )
         heatmap_plot = create_heatmap_plot(
             z_data,
@@ -1155,7 +1170,7 @@ def _run_mast_job(job_id, zip_path, form_args):
             z_range=variability_range,
             z_axis_display=z_axis_display,
             flux_unit=metadata.get('flux_unit', 'Unknown'),
-            errors_2d=error_raw_2d_filtered
+            errors_2d=errors_for_plot
         )
         globals()['last_surface_plot_html'] = pio.to_html(surface_plot, include_plotlyjs='cdn', full_html=True)
         globals()['last_heatmap_plot_html'] = pio.to_html(heatmap_plot, include_plotlyjs='cdn', full_html=True)
