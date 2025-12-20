@@ -210,12 +210,21 @@ def load_integrations_from_fits(file_path, per_integ_cb=None, total_in_file=None
                 flux_unit = 'MJy'
             header_info['flux_unit'] = flux_unit
             integrations = []
-            nint = len(mids)
-            for idx, mjd in enumerate(mids, start=1):
-                data = hdul['EXTRACT1D', idx].data
-                w = data['WAVELENGTH']
-                f = data['FLUX']
-                e = data['FLUX_ERROR'] if 'FLUX_ERROR' in data.names else np.full_like(f, np.nan)
+            extract = hdul['EXTRACT1D'].data if 'EXTRACT1D' in hdul else None
+            nint = len(extract) if extract is not None else len(mids)
+            for idx, mjd in enumerate(mids[:nint], start=1):
+                try:
+                    data = hdul['EXTRACT1D', idx].data
+                    w = data['WAVELENGTH']
+                    f = data['FLUX']
+                    e = data['FLUX_ERROR'] if 'FLUX_ERROR' in data.names else np.full_like(f, np.nan)
+                except Exception:
+                    if extract is None or (idx - 1) >= len(extract):
+                        raise
+                    row = extract[idx - 1]
+                    w = row['WAVELENGTH']
+                    f = row['FLUX']
+                    e = row['FLUX_ERROR'] if 'FLUX_ERROR' in extract.names else np.full_like(f, np.nan)
                 mask = ~np.isnan(f)
                 integrations.append({
                     'wavelength': w[mask],
@@ -229,7 +238,6 @@ def load_integrations_from_fits(file_path, per_integ_cb=None, total_in_file=None
     except Exception as e:
         logger.error(f"Error reading FITS file {file_path}: {e}")
         return None, None
-
 
 
 def calculate_bin_size(data_length, num_plots):
@@ -557,8 +565,13 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False, max_integr
         try:
             if fp.endswith('.fits'):
                 with fits.open(fp, memmap=True) as hdul:
-                    count = len(hdul['INT_TIMES'].data['int_mid_MJD_UTC'])
-                    first_t = float(hdul['INT_TIMES'].data['int_mid_MJD_UTC'][0])
+                    mids = hdul['INT_TIMES'].data['int_mid_MJD_UTC']
+                    if 'EXTRACT1D' in hdul:
+                        extract = hdul['EXTRACT1D'].data
+                        count = min(len(mids), len(extract))
+                    else:
+                        count = len(mids)
+                    first_t = float(mids[0])
             elif fp.endswith('.h5'):
                 with h5py.File(fp, 'r') as h:
                     fk = _first_key(h, "calibrated_optspec", "stdspec", "optspec")
@@ -710,8 +723,6 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False, max_integr
         'flux_unit': all_headers[0]['flux_unit'] if all_headers else 'Unknown',
     }
     return common_wl, flux_norm_2d, flux_raw_2d, times_hours, metadata, error_raw_2d
-
-
 
 @app.route('/plots/<path:filename>')
 def serve_plots(filename):

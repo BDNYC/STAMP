@@ -656,7 +656,7 @@ async function uploadMastDirectory() {
           reject(e);
         }
       };
-      __progressTimer = setInterval(poll, 800);
+      __progressTimer = setInterval(poll, 200);
       poll();
     });
 
