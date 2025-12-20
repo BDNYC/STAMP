@@ -24,14 +24,12 @@ import os
 import threading
 import time as _time
 import uuid
+from cache_manager import DatasetCache
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 app = Flask(__name__)
-
-
-
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -40,10 +38,12 @@ latest_surface_figure = None
 latest_heatmap_figure = None
 latest_spectrum_video_path = None
 
-
 PROGRESS = {}
 RESULTS  = {}
 PROG_LOCK = threading.Lock()
+
+cache = DatasetCache(ttl_hours=24, max_cache_size_gb=10)
+
 
 def _progress_set(job_id, *, percent=None, message=None, status=None, reset=False, stage=None, processed_integrations=None, total_integrations=None, throughput=None, eta_seconds=None):
     with PROG_LOCK:
@@ -88,7 +88,7 @@ def load_config(config_file='config.yaml'):
         with open(cfg_path, 'r') as f:
             return yaml.safe_load(f) or {}
     except Exception as e:
-        logger.warning(f"Error loading configuration: {str(e)}. Using default values.")
+        logger.warning(f"Error loading configuration: {str(e)}.Using default values.")
         return {}
 
 
@@ -106,7 +106,7 @@ def apply_data_ranges(wavelength, flux, time, wavelength_range=None, time_range=
         wl_min = max(wl_min, original_wl_range[0])
         wl_max = min(wl_max, original_wl_range[1])
         if wl_min >= wl_max:
-            logger.warning(f"Invalid wavelength range: {wl_min} to {wl_max}. Using full range.")
+            logger.warning(f"Invalid wavelength range: {wl_min} to {wl_max}.Using full range.")
             wl_mask = np.ones(len(wavelength), dtype=bool)
         else:
             wl_mask = (wavelength >= wl_min) & (wavelength <= wl_max)
@@ -119,7 +119,7 @@ def apply_data_ranges(wavelength, flux, time, wavelength_range=None, time_range=
         time_min = max(time_min, original_time_range[0])
         time_max = min(time_max, original_time_range[1])
         if time_min >= time_max:
-            logger.warning(f"Invalid time range: {time_min} to {time_max}. Using full range.")
+            logger.warning(f"Invalid time range: {time_min} to {time_max}.Using full range.")
             time_mask = np.ones(len(time), dtype=bool)
         else:
             time_mask = (time >= time_min) & (time <= time_max)
@@ -183,11 +183,23 @@ def load_integrations_from_h5(file_path, per_integ_cb=None, total_in_file=None):
         return integrations, header_info
 
 
-
 def load_integrations_from_fits(file_path, per_integ_cb=None, total_in_file=None):
     try:
+        logger.info(f"📂 Opening FITS file: {os.path.basename(file_path)}")
         with fits.open(file_path) as hdul:
+            logger.info(f"   Available extensions: {[hdu.name for hdu in hdul]}")
+
+            if 'INT_TIMES' not in hdul:
+                logger.error(f"   ❌ No INT_TIMES extension found")
+                return None, None
+
             mids = hdul['INT_TIMES'].data['int_mid_MJD_UTC']
+            logger.info(f"   ✓ Found INT_TIMES with {len(mids)} entries")
+
+            if 'EXTRACT1D' not in hdul:
+                logger.error(f"   ❌ No EXTRACT1D extension found")
+                return None, None
+
             header_info = {
                 'filename': os.path.basename(file_path),
                 'target': hdul[0].header.get('TARGNAME', 'Unknown'),
@@ -197,6 +209,7 @@ def load_integrations_from_fits(file_path, per_integ_cb=None, total_in_file=None
                 'obs_date': hdul[0].header.get('DATE-OBS', 'Unknown'),
                 'exposure_time': hdul[0].header.get('EXPTIME', 'Unknown'),
             }
+
             flux_unit = hdul[0].header.get('BUNIT', None)
             if flux_unit is None and 'EXTRACT1D' in hdul:
                 flux_unit = hdul['EXTRACT1D'].header.get('BUNIT', None)
@@ -209,36 +222,162 @@ def load_integrations_from_fits(file_path, per_integ_cb=None, total_in_file=None
             if flux_unit is None:
                 flux_unit = 'MJy'
             header_info['flux_unit'] = flux_unit
-            integrations = []
-            extract = hdul['EXTRACT1D'].data if 'EXTRACT1D' in hdul else None
-            nint = len(extract) if extract is not None else len(mids)
-            for idx, mjd in enumerate(mids[:nint], start=1):
-                try:
-                    data = hdul['EXTRACT1D', idx].data
-                    w = data['WAVELENGTH']
-                    f = data['FLUX']
-                    e = data['FLUX_ERROR'] if 'FLUX_ERROR' in data.names else np.full_like(f, np.nan)
-                except Exception:
-                    if extract is None or (idx - 1) >= len(extract):
-                        raise
-                    row = extract[idx - 1]
-                    w = row['WAVELENGTH']
-                    f = row['FLUX']
-                    e = row['FLUX_ERROR'] if 'FLUX_ERROR' in extract.names else np.full_like(f, np.nan)
-                mask = ~np.isnan(f)
-                integrations.append({
-                    'wavelength': w[mask],
-                    'flux': f[mask],
-                    'error': e[mask] if e is not None else np.full(np.sum(mask), np.nan),
-                    'time': Time(mjd, format='mjd', scale='utc')
-                })
-                if per_integ_cb:
-                    per_integ_cb(idx, total_in_file or nint)
-            return integrations, header_info
-    except Exception as e:
-        logger.error(f"Error reading FITS file {file_path}: {e}")
-        return None, None
 
+            integrations = []
+            nint = len(mids)
+
+            # CRITICAL: Check if EXTRACT1D is a table with time columns
+            extract_table = hdul['EXTRACT1D'].data
+            has_table_format = len(extract_table) > 0
+            has_time_in_table = any(col in extract_table.columns.names for col in ['MJD-AVG', 'MJD-BEG', 'MJD-END'])
+
+            if has_table_format and has_time_in_table:
+                # PREFER table format with embedded time
+                logger.info(f"   ✓ EXTRACT1D format:  table with embedded time columns")
+                logger.info(f"   Processing {len(extract_table)} integrations from table...")
+
+                # Choose time column priority: MJD-AVG > MJD-BEG > MJD-END
+                time_col = None
+                if 'MJD-AVG' in extract_table.columns.names:
+                    time_col = 'MJD-AVG'
+                elif 'MJD-BEG' in extract_table.columns.names:
+                    time_col = 'MJD-BEG'
+                elif 'MJD-END' in extract_table.columns.names:
+                    time_col = 'MJD-END'
+
+                logger.info(f"   Using time column: {time_col}")
+
+                for idx in range(len(extract_table)):
+                    try:
+                        row = extract_table[idx]
+                        w = row['WAVELENGTH']
+                        f = row['FLUX']
+                        e = row['FLUX_ERROR'] if 'FLUX_ERROR' in extract_table.columns.names else np.full_like(f,
+                                                                                                               np.nan)
+                        mjd = row[time_col]
+
+                        # Create mask for finite values (handles NaN and Inf)
+                        mask = np.isfinite(f) & np.isfinite(w)
+                        n_valid = np.sum(mask)
+
+                        # Log first few integrations for debugging
+                        if idx < 3:
+                            logger.info(
+                                f"   Integration {idx + 1}: {n_valid}/{len(f)} valid flux points, time={mjd:.6f}")
+
+                        # Skip if less than 10 valid points (too sparse)
+                        if n_valid < 10:
+                            logger.warning(f"   ⚠️ Skipping integration {idx + 1}:  only {n_valid} valid points")
+                            continue
+
+                        integrations.append({
+                            'wavelength': w[mask],
+                            'flux': f[mask],
+                            'error': e[mask],
+                            'time': Time(mjd, format='mjd', scale='utc')
+                        })
+
+                        if per_integ_cb:
+                            per_integ_cb(idx + 1, len(extract_table))
+
+                    except Exception as e:
+                        logger.error(f"   ❌ ERROR processing integration {idx + 1}:  {e}", exc_info=True)
+                        continue
+
+            else:
+                # Fall back to checking for individual extensions OR table without time
+                has_individual_extensions = False
+                try:
+                    test_data = hdul['EXTRACT1D', 1].data
+                    has_individual_extensions = True
+                    logger.info(f"   ✓ EXTRACT1D format: individual extensions")
+                except (KeyError, IndexError, TypeError):
+                    logger.info(f"   ✓ EXTRACT1D format: single table")
+
+                if has_individual_extensions:
+                    # Process individual extensions (1-indexed)
+                    logger.info(f"   Processing {nint} individual EXTRACT1D extensions...")
+                    for idx, mjd in enumerate(mids, start=1):
+                        try:
+                            data = hdul['EXTRACT1D', idx].data
+                            w = data['WAVELENGTH']
+                            f = data['FLUX']
+                            e = data['FLUX_ERROR'] if 'FLUX_ERROR' in data.names else np.full_like(f, np.nan)
+
+                            mask = np.isfinite(f) & np.isfinite(w)
+                            n_valid = np.sum(mask)
+
+                            if idx <= 3:
+                                logger.info(f"   Integration {idx} (individual): {n_valid}/{len(f)} valid points")
+
+                            if n_valid < 10:
+                                logger.warning(f"   ⚠️ Skipping integration {idx}: only {n_valid} valid points")
+                                continue
+
+                            integrations.append({
+                                'wavelength': w[mask],
+                                'flux': f[mask],
+                                'error': e[mask],
+                                'time': Time(mjd, format='mjd', scale='utc')
+                            })
+                            if per_integ_cb:
+                                per_integ_cb(idx, nint)
+
+                        except (KeyError, IndexError) as e:
+                            logger.error(f"   ❌ ERROR processing integration {idx}: {e}", exc_info=True)
+                            continue
+
+                else:
+                    # Process table format using INT_TIMES for time
+                    logger.info(f"   Processing {nint} integrations from table (using INT_TIMES for time)...")
+
+                    for idx, mjd in enumerate(mids):
+                        if idx >= len(extract_table):
+                            logger.warning(
+                                f"   ⚠️ Skipping integration {idx + 1}:  table only has {len(extract_table)} rows")
+                            continue
+
+                        try:
+                            row = extract_table[idx]
+                            w = row['WAVELENGTH']
+                            f = row['FLUX']
+                            e = row['FLUX_ERROR'] if 'FLUX_ERROR' in extract_table.columns.names else np.full_like(f,
+                                                                                                                   np.nan)
+
+                            mask = np.isfinite(f) & np.isfinite(w)
+                            n_valid = np.sum(mask)
+
+                            if idx < 3:
+                                logger.info(f"   Integration {idx + 1} (fallback): {n_valid}/{len(f)} valid points")
+
+                            if n_valid < 10:
+                                logger.warning(f"   ⚠️ Skipping integration {idx + 1}: only {n_valid} valid points")
+                                continue
+
+                            integrations.append({
+                                'wavelength': w[mask],
+                                'flux': f[mask],
+                                'error': e[mask],
+                                'time': Time(mjd, format='mjd', scale='utc')
+                            })
+                            if per_integ_cb:
+                                per_integ_cb(idx + 1, nint)
+
+                        except Exception as e:
+                            logger.error(f"   ❌ ERROR processing integration {idx + 1}: {e}", exc_info=True)
+                            continue
+
+            logger.info(f"   ✅ Loaded {len(integrations)} integrations from {len(mids)} INT_TIMES entries")
+
+            if len(integrations) == 0:
+                logger.error(f"   ❌ No integrations were successfully loaded!")
+                return None, None
+
+            return integrations, header_info
+
+    except Exception as e:
+        logger.error(f"❌ Error reading FITS file {file_path}: {e}", exc_info=True)
+        return None, None
 
 def calculate_bin_size(data_length, num_plots):
     return max(1, data_length // num_plots)
@@ -556,21 +695,17 @@ def calculate_variability_from_raw_flux(flux_raw_2d):
     return flux_norm_2d
 
 
-
 def process_mast_files_with_gaps(file_paths, use_interpolation=False, max_integrations=None, progress_cb=None):
     if progress_cb:
         progress_cb(2.0, "Scanning files…", stage="scan")
+
     scans = []
     for fp in file_paths or []:
         try:
-            if fp.endswith('.fits'):
+            if fp.endswith('.fits'):  # FIXED: removed space
                 with fits.open(fp, memmap=True) as hdul:
                     mids = hdul['INT_TIMES'].data['int_mid_MJD_UTC']
-                    if 'EXTRACT1D' in hdul:
-                        extract = hdul['EXTRACT1D'].data
-                        count = min(len(mids), len(extract))
-                    else:
-                        count = len(mids)
+                    count = len(mids)
                     first_t = float(mids[0])
             elif fp.endswith('.h5'):
                 with h5py.File(fp, 'r') as h:
@@ -583,80 +718,115 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False, max_integr
             else:
                 continue
             scans.append({"path": fp, "count": int(count), "first_t": first_t})
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Error scanning {os.path.basename(fp)}: {e}")
             scans.append({"path": fp, "count": 0, "first_t": None})
+
     scans = [s for s in scans if s["count"] > 0]
     scans.sort(key=lambda d: (float('inf') if d["first_t"] is None else d["first_t"]))
+
     total_files = len(scans)
     total_est_integrations = sum(s["count"] for s in scans) if scans else 0
+
+    logger.info(f"📁 Scanned files: {total_files} valid files, {total_est_integrations} total integrations")
+
     if progress_cb:
-        progress_cb(10.0, f"Found {total_est_integrations} integrations in {total_files} files", stage="scan", processed_integrations=0, total_integrations=total_est_integrations)
+        progress_cb(10.0, f"Found {total_est_integrations} integrations in {total_files} files", stage="scan",
+                    processed_integrations=0, total_integrations=total_est_integrations)
+
     all_integrations = []
     all_headers = []
     processed_count = 0
     read_start, read_end = 10.0, 60.0
+
     def pct_for_read(processed):
         if total_est_integrations == 0:
             return read_start
         frac = processed / total_est_integrations
         return read_start + (read_end - read_start) * min(1.0, max(0.0, frac))
+
     for i, s in enumerate(scans):
         fp = s["path"]
         file_total = s["count"]
+
+        logger.info(f"📄 Processing file {i + 1}/{total_files}: {os.path.basename(fp)}")
+        logger.info(f"   Expected integrations: {file_total}")
+
         def per_integ_cb(done_local, total_local):
             nonlocal processed_count
             processed_count += 1
             if progress_cb:
                 progress_cb(
                     pct_for_read(processed_count),
-                    f"Reading {i+1}/{total_files} • {done_local}/{file_total} integrations",
+                    f"Reading {i + 1}/{total_files} • {done_local}/{file_total} integrations",
                     stage="read",
                     processed_integrations=processed_count,
                     total_integrations=total_est_integrations
                 )
-        if fp.endswith('.fits'):
-            integrations, header_info = load_integrations_from_fits(fp, per_integ_cb=per_integ_cb, total_in_file=file_total)
+
+        if fp.endswith('.fits'):  # FIXED: removed space
+            logger.info(f"   Calling load_integrations_from_fits()...")
+            integrations, header_info = load_integrations_from_fits(fp, per_integ_cb=per_integ_cb,
+                                                                    total_in_file=file_total)
+            logger.info(
+                f"   Returned: integrations={len(integrations) if integrations else 'None'}, header_info={'OK' if header_info else 'None'}")
         elif fp.endswith('.h5'):
-            integrations, header_info = load_integrations_from_h5(fp, per_integ_cb=per_integ_cb, total_in_file=file_total)
+            logger.info(f"   Calling load_integrations_from_h5()...")
+            integrations, header_info = load_integrations_from_h5(fp, per_integ_cb=per_integ_cb,
+                                                                  total_in_file=file_total)
+            logger.info(
+                f"   Returned: integrations={len(integrations) if integrations else 'None'}, header_info={'OK' if header_info else 'None'}")
         else:
+            logger.warning(f"   ⚠️ Skipping unknown file type")
             integrations, header_info = (None, None)
+
         if integrations:
+            logger.info(f"   ✅ Adding {len(integrations)} integrations to all_integrations")
             all_integrations.extend(integrations)
             all_headers.append(header_info)
+        else:
+            logger.error(f"   ❌ No integrations returned from this file!")
+
         if progress_cb:
             progress_cb(
                 pct_for_read(processed_count),
-                f"Loaded {i+1}/{total_files} files",
+                f"Loaded {i + 1}/{total_files} files",
                 stage="read",
                 processed_integrations=processed_count,
                 total_integrations=total_est_integrations
             )
+
+    logger.info(f"📊 Total integrations collected: {len(all_integrations)}")
+
     if not all_integrations:
         raise ValueError("No valid integrations found in files")
+
     all_integrations.sort(key=lambda x: x['time'] if not hasattr(x['time'], 'mjd') else x['time'].mjd)
     original_count = len(all_integrations)
-    if max_integrations and max_integrations < len(all_integrations):
-        step = len(all_integrations) / max_integrations
-        indices = [int(i * step) for i in range(max_integrations)]
-        sampled_integrations = [all_integrations[i] for i in indices]
-        all_integrations = sampled_integrations
+
     min_wl = max(np.min(integ['wavelength']) for integ in all_integrations)
     max_wl = min(np.max(integ['wavelength']) for integ in all_integrations)
     n_wave = 1000
     common_wl = np.linspace(min_wl, max_wl, n_wave)
+
     flux_raw_list = []
     error_raw_list = []
     times = []
     total_integ = len(all_integrations)
     regrid_start, regrid_end = 60.0, 88.0
+
     def pct_for_regrid(done):
         if total_integ == 0:
             return regrid_start
         frac = done / total_integ
         return regrid_start + (regrid_end - regrid_start) * min(1.0, max(0.0, frac))
+
     if progress_cb:
-        progress_cb(regrid_start, "Regridding integrations…", stage="regrid", processed_integrations=processed_count, total_integrations=total_est_integrations)
+        progress_cb(regrid_start, "Regridding integrations…", stage="regrid", processed_integrations=processed_count,
+                    total_integrations=total_est_integrations)
+
     t_start = _time.time()
+
     for k, integ in enumerate(all_integrations):
         f_interp = interpolate.interp1d(
             integ['wavelength'],
@@ -666,6 +836,7 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False, max_integr
             fill_value=np.nan
         )
         flux_raw_list.append(f_interp(common_wl))
+
         if 'error' in integ and integ['error'] is not None:
             e_interp = interpolate.interp1d(
                 integ['wavelength'],
@@ -677,24 +848,31 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False, max_integr
             error_raw_list.append(e_interp(common_wl))
         else:
             error_raw_list.append(np.full_like(common_wl, np.nan))
+
         t = integ['time'].mjd if hasattr(integ['time'], 'mjd') else integ['time']
         times.append(t)
+
         if progress_cb:
             elapsed = _time.time() - t_start
             done_total = processed_count + (k + 1)
             tp = done_total / elapsed if elapsed > 0 else None
-            progress_cb(pct_for_regrid(k + 1), f"Regridding {k+1}/{total_integ} integrations", stage="regrid", processed_integrations=done_total, total_integrations=total_est_integrations, throughput=(tp if tp is not None else None))
+            progress_cb(pct_for_regrid(k + 1), f"Regridding {k + 1}/{total_integ} integrations", stage="regrid",
+                        processed_integrations=done_total, total_integrations=total_est_integrations,
+                        throughput=(tp if tp is not None else None))
+
     flux_raw_2d = np.array(flux_raw_list).T
     error_raw_2d = np.array(error_raw_list).T
     times_arr = np.array(times)
     t0 = times_arr.min()
     times_hours = (times_arr - t0) * 24.0
+
     if use_interpolation:
         if progress_cb:
             progress_cb(88.0, "Interpolating across time…", stage="interpolate")
         time_grid = np.linspace(times_hours.min(), times_hours.max(), len(times_hours))
         flux_raw_interpolated = np.zeros((flux_raw_2d.shape[0], len(time_grid)))
         error_raw_interpolated = np.zeros((error_raw_2d.shape[0], len(time_grid)))
+
         for i in range(flux_raw_2d.shape[0]):
             f_raw_interp = interpolate.interp1d(times_hours, flux_raw_2d[i, :], kind='linear',
                                                 bounds_error=False, fill_value='extrapolate')
@@ -702,17 +880,24 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False, max_integr
                                                 bounds_error=False, fill_value='extrapolate')
             flux_raw_interpolated[i, :] = f_raw_interp(time_grid)
             error_raw_interpolated[i, :] = e_raw_interp(time_grid)
+
             if progress_cb and i % 50 == 0:
-                progress_cb(88.0 + 4.0 * (i / max(1, flux_raw_2d.shape[0])), "Interpolating across time…", stage="interpolate")
+                progress_cb(88.0 + 4.0 * (i / max(1, flux_raw_2d.shape[0])), "Interpolating across time…",
+                            stage="interpolate")
+
         flux_raw_2d = flux_raw_interpolated
         error_raw_2d = error_raw_interpolated
         times_hours = time_grid
+
     if progress_cb:
-        progress_cb(92.0, "Computing variability & metadata…", stage="finalize", processed_integrations=processed_count + total_integ, total_integrations=total_est_integrations)
+        progress_cb(92.0, "Computing variability & metadata…", stage="finalize",
+                    processed_integrations=processed_count + total_integ, total_integrations=total_est_integrations)
+
     flux_norm_2d = calculate_variability_from_raw_flux(flux_raw_2d)
+
     metadata = {
         'total_integrations': original_count,
-        'plotted_integrations': len(all_integrations),
+        'plotted_integrations': original_count,
         'files_processed': len(file_paths),
         'wavelength_range': f"{common_wl.min():.3f}–{common_wl.max():.3f} µm",
         'time_range': f"{times_hours.min():.2f}–{times_hours.max():.2f} hours",
@@ -722,6 +907,13 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False, max_integr
         'gratings': list(set(h['grating'] for h in all_headers if h)),
         'flux_unit': all_headers[0]['flux_unit'] if all_headers else 'Unknown',
     }
+
+    logger.info(f"📊 PROCESSING COMPLETE:")
+    logger.info(f"   Original integrations: {original_count}")
+    logger.info(f"   Final time points:  {len(times_hours)}")
+    logger.info(f"   Wavelength points: {len(common_wl)}")
+    logger.info(f"   Flux shape: {flux_norm_2d.shape}")
+
     return common_wl, flux_norm_2d, flux_raw_2d, times_hours, metadata, error_raw_2d
 
 @app.route('/plots/<path:filename>')
@@ -1098,32 +1290,129 @@ def _extract_and_sort(zip_path, work_dir):
             continue
     return [fp for fp, _ in sorted(file_times, key=lambda x: x[1])]
 
+
 def _run_mast_job(job_id, zip_path, form_args):
     _progress_set(job_id, reset=True, percent=1.0, message="Queued…", stage="queued")
-    temp_dir = tempfile.mkdtemp(prefix=f"mast_job_{job_id[:8]}_")
+    temp_dir = tempfile.mkdtemp(prefix=f"mast_job_{job_id[:  8]}_")
+
     try:
-        work_dir = os.path.join(temp_dir, "unzipped")
-        os.makedirs(work_dir, exist_ok=True)
-        _progress_set(job_id, percent=3.0, message="Extracting archive…", stage="scan")
-        fits_files_sorted = _extract_and_sort(zip_path, work_dir)
-        if not fits_files_sorted:
-            raise ValueError("No valid FITS/H5 files found in archive.")
-        custom_bands = form_args["custom_bands"]
+
         use_interpolation = form_args["use_interpolation"]
-        colorscale = form_args["colorscale"]
         num_integrations = form_args["num_integrations"]
+        is_demo = form_args.get("is_demo", False)
+
+        _progress_set(job_id, percent=2.0, message="Checking cache…", stage="scan")
+
+        cache_key_path = zip_path
+
+        logger.info(f"🔍 Job {job_id[:8]}: Cache lookup parameters:")
+        logger.info(f"   zip_path: {os.path.basename(zip_path)}")
+        logger.info(f"   cache_key_path: {os.path.basename(cache_key_path)}")
+        logger.info(f"   interpolation: {use_interpolation}")
+        logger.info(f"   num_integrations: {num_integrations}")
+
+        cached_data = cache.get(cache_key_path, use_interpolation)
+
+
+        if cached_data:
+            logger.info(f"✅ Job {job_id[: 8]}: Cache HIT!")
+
+            logger.info(
+                f"   Cached metadata total_integrations:   {cached_data['metadata'].get('total_integrations', 'unknown')}")
+            logger.info(
+                f"   Cached metadata plotted_integrations: {cached_data['metadata'].get('plotted_integrations', 'unknown')}")
+            logger.info(f"   Cached time_1d length: {len(cached_data['time_1d'])}")
+            logger.info(f"   Cached wavelength_1d length: {len(cached_data['wavelength_1d'])}")
+            logger.info(f"   Cached flux_raw_2d shape: {cached_data['flux_raw_2d'].shape}")
+
+            _progress_set(job_id, percent=60.0, message="Loaded from cache", stage="read")
+
+            import copy
+            wavelength_1d = cached_data['wavelength_1d'].copy()
+            flux_norm_2d = cached_data['flux_norm_2d'].copy()
+            flux_raw_2d = cached_data['flux_raw_2d'].copy()
+            time_1d = cached_data['time_1d'].copy()
+            metadata = copy.deepcopy(cached_data['metadata'])
+            error_raw_2d = cached_data['error_raw_2d'].copy()
+
+            logger.info(f"   ✓ Data copied from cache")
+
+        else:
+            logger.info(f"❌ Job {job_id[:8]}: Cache MISS - processing from scratch")
+
+            work_dir = os.path.join(temp_dir, "unzipped")
+            os.makedirs(work_dir, exist_ok=True)
+            _progress_set(job_id, percent=3.0, message="Extracting archive…", stage="scan")
+            fits_files_sorted = _extract_and_sort(zip_path, work_dir)
+
+            if not fits_files_sorted:
+                raise ValueError("No valid FITS/H5 files found in archive.")
+
+            logger.info(f"   Found {len(fits_files_sorted)} FITS/H5 files")
+
+            def cb(pct, msg=None, **kw):
+                _progress_set(job_id, percent=pct, message=msg, **kw)
+
+            wavelength_1d, flux_norm_2d, flux_raw_2d, time_1d, metadata, error_raw_2d = process_mast_files_with_gaps(
+                fits_files_sorted,
+                use_interpolation,
+                max_integrations=None,
+                progress_cb=cb
+            )
+
+            logger.info(f"   Processed total_integrations: {metadata.get('total_integrations', 'unknown')}")
+            logger.info(f"   Processed plotted_integrations: {metadata.get('plotted_integrations', 'unknown')}")
+            logger.info(f"   Processed time_1d length: {len(time_1d)}")
+            logger.info(f"   Processed wavelength_1d length:  {len(wavelength_1d)}")
+            logger.info(f"   Processed flux_raw_2d shape: {flux_raw_2d.shape}")
+
+            _progress_set(job_id, percent=93.0, message="Caching processed data…", stage="finalize")
+
+            cache_data = {
+                'wavelength_1d': wavelength_1d,
+                'flux_norm_2d': flux_norm_2d,
+                'flux_raw_2d': flux_raw_2d,
+                'time_1d': time_1d,
+                'metadata': metadata,
+                'error_raw_2d': error_raw_2d
+            }
+
+            cache.set(cache_key_path, use_interpolation, cache_data)
+            logger.info(f"💾 Data cached successfully")
+
+        logger.info(f"📊 Job {job_id[: 8]}: Data state after cache retrieval:")
+        logger.info(f"   metadata total_integrations: {metadata.get('total_integrations', 'unknown')}")
+        logger.info(f"   metadata plotted_integrations:   {metadata.get('plotted_integrations', 'unknown')}")
+        logger.info(f"   time_1d length:  {len(time_1d)}")
+        logger.info(f"   time_1d range: {time_1d.min():.2f} to {time_1d.max():.2f} hours")
+
+        if num_integrations and num_integrations > 0 and num_integrations < len(time_1d):
+            _progress_set(job_id, percent=94.0, message=f"Sampling to {num_integrations} integrations…",
+                          stage="finalize")
+            logger.info(f"🎯 Sampling from {len(time_1d)} to {num_integrations} integrations")
+
+            step = len(time_1d) / num_integrations
+            indices = [int(i * step) for i in range(num_integrations)]
+
+            flux_norm_2d = flux_norm_2d[: , indices]
+            flux_raw_2d = flux_raw_2d[:, indices]
+            error_raw_2d = error_raw_2d[:, indices]
+            time_1d = time_1d[indices]
+
+            metadata['plotted_integrations'] = num_integrations
+
+            logger.info(f"   ✓ Sampled to {len(time_1d)} integrations")
+            logger.info(f"   New flux shape: {flux_raw_2d.shape}")
+
+        _progress_set(job_id, percent=95.0, message="Applying filters…", stage="finalize")
+
+        custom_bands = form_args["custom_bands"]
+        colorscale = form_args["colorscale"]
         z_axis_display = form_args["z_axis_display"]
         time_range = form_args["time_range"]
         wavelength_range = form_args["wavelength_range"]
         variability_range = form_args["variability_range"]
-        def cb(pct, msg=None, **kw):
-            _progress_set(job_id, percent=pct, message=msg, **kw)
-        wavelength_1d, flux_norm_2d, flux_raw_2d, time_1d, metadata, error_raw_2d = process_mast_files_with_gaps(
-            fits_files_sorted,
-            use_interpolation,
-            max_integrations=(num_integrations if num_integrations and num_integrations > 0 else None),
-            progress_cb=cb
-        )
+
         range_info = []
         if wavelength_range or time_range:
             wavelength_1d_norm, flux_norm_2d_filtered, time_1d_norm, range_info = apply_data_ranges(
@@ -1135,24 +1424,35 @@ def _run_mast_job(job_id, zip_path, form_args):
             wavelength_1d_err, error_raw_2d_filtered, time_1d_err, _ = apply_data_ranges(
                 wavelength_1d, error_raw_2d, time_1d, wavelength_range, time_range
             )
+            logger.info(f"   ✂️ Ranges applied:   {'; '.join(range_info)}")
         else:
             wavelength_1d_norm, flux_norm_2d_filtered, time_1d_norm = wavelength_1d, flux_norm_2d, time_1d
             wavelength_1d_raw, flux_raw_2d_filtered, time_1d_raw = wavelength_1d, flux_raw_2d, time_1d
             wavelength_1d_err, error_raw_2d_filtered, time_1d_err = wavelength_1d, error_raw_2d, time_1d
+            logger.info(f"   No range filtering applied")
+
         metadata['user_ranges'] = '; '.join(range_info) if range_info else None
+
+        logger.info(f"📈 Job {job_id[: 8]}: Final data for plotting:")
+        logger.info(f"   time_1d_norm length: {len(time_1d_norm)}")
+        logger.info(f"   time_1d_norm range: {time_1d_norm.min():.2f} to {time_1d_norm.max():.2f} hours")
+        logger.info(f"   flux shape: {flux_norm_2d_filtered.shape}")
+
         if z_axis_display == 'flux':
             z_data = flux_raw_2d_filtered
             errors_for_plot = error_raw_2d_filtered
         else:
             z_data = flux_norm_2d_filtered
-            # Convert errors to variability percentage
             median_per_wl = np.nanmedian(flux_raw_2d_filtered, axis=1, keepdims=True)
             median_per_wl[median_per_wl == 0] = 1.0
             errors_for_plot = (error_raw_2d_filtered / median_per_wl) * 100
+
         ref_spec = np.nanmedian(np.asarray(flux_raw_2d_filtered), axis=1)
-        _progress_set(job_id, percent=95.0, message="Rendering plots…", stage="finalize",
+
+        _progress_set(job_id, percent=96.0, message="Rendering plots…", stage="finalize",
                       processed_integrations=_progress_set(job_id)["processed_integrations"],
                       total_integrations=_progress_set(job_id)["total_integrations"])
+
         surface_plot = create_surface_plot_with_visits(
             z_data,
             wavelength_1d_norm if z_axis_display != 'flux' else wavelength_1d_raw,
@@ -1168,6 +1468,7 @@ def _run_mast_job(job_id, zip_path, form_args):
             flux_unit=metadata.get('flux_unit', 'Unknown'),
             errors_2d=errors_for_plot
         )
+
         heatmap_plot = create_heatmap_plot(
             z_data,
             wavelength_1d_norm if z_axis_display != 'flux' else wavelength_1d_raw,
@@ -1181,35 +1482,41 @@ def _run_mast_job(job_id, zip_path, form_args):
             z_range=variability_range,
             z_axis_display=z_axis_display,
             flux_unit=metadata.get('flux_unit', 'Unknown'),
-            errors_2d=errors_for_plot
+            errors_2d=error_raw_2d_filtered
         )
+
         globals()['last_surface_plot_html'] = pio.to_html(surface_plot, include_plotlyjs='cdn', full_html=True)
         globals()['last_heatmap_plot_html'] = pio.to_html(heatmap_plot, include_plotlyjs='cdn', full_html=True)
         globals()['last_surface_fig_json'] = surface_plot.to_plotly_json()
         globals()['last_heatmap_fig_json'] = heatmap_plot.to_plotly_json()
         globals()['last_custom_bands'] = custom_bands
+
         payload = {
             'surface_plot': surface_plot.to_json(),
-            'heatmap_plot': heatmap_plot.to_json(),
+            'heatmap_plot':  heatmap_plot.to_json(),
             'metadata': metadata,
             'reference_spectrum': json.dumps(ref_spec.tolist())
         }
+
         with PROG_LOCK:
             RESULTS[job_id] = payload
+
+        logger.info(f"✅ Job {job_id[: 8]}: Completed successfully")
         _progress_set(job_id, percent=100.0, message="Done", status="done", stage="done")
+
     except Exception as e:
-        logger.exception("Background job failed")
+        logger.exception(f"❌ Job {job_id[: 8]}:   Background job failed")
         _progress_set(job_id, message=str(e), status="error", stage="error")
     finally:
         try:
             shutil.rmtree(temp_dir, ignore_errors=True)
         except Exception:
             pass
-        try:
-            os.remove(zip_path)
-        except Exception:
-            pass
-
+        if not is_demo:
+            try:
+                os.remove(zip_path)
+            except Exception:
+                pass
 
 @app.route('/start_mast', methods=['POST'])
 def start_mast():
@@ -1218,25 +1525,27 @@ def start_mast():
         use_demo = request.form.get('use_demo', 'false').lower() == 'true'
 
         if use_demo:
-            # Use demo dataset
+            # Use demo dataset - use original path for cache key
             demo_zip = os.path.join(BASE_DIR, 'static', 'demo_data', 'demo_jwst_timeseries.zip')
 
             if not os.path.exists(demo_zip):
-                return jsonify({'error': 'Demo dataset not found.  Please upload your own data.'}), 404
+                return jsonify({'error': 'Demo dataset not found. Please upload your own data.'}), 404
 
+            # Use the original demo path directly (no copying)
+            tmp_zip = demo_zip
+            logger.info(f"Using demo dataset at {demo_zip}")
 
-            tmp_zip = os.path.join(tempfile.gettempdir(), f"mast_demo_{uuid.uuid4().hex}.zip")
-            shutil.copy2(demo_zip, tmp_zip)
-            logger.info(f"Using demo dataset:  {demo_zip}")
         else:
             # Use uploaded file
             mast_file = request.files.get('mast_zip')
             if not mast_file or mast_file.filename == '':
-                return jsonify({'error': 'No MAST zip file provided. '}), 400
+                return jsonify({'error': 'No MAST zip file provided'}), 400
 
             tmp_zip = os.path.join(tempfile.gettempdir(), f"mast_job_{uuid.uuid4().hex}.zip")
             mast_file.save(tmp_zip)
             logger.info(f"Processing uploaded file: {mast_file.filename}")
+
+
 
         # Parse form parameters (same for both demo and uploaded)
         custom_bands_json = request.form.get('custom_bands', '[]')
@@ -1280,17 +1589,16 @@ def start_mast():
             "num_integrations": num_integrations,
             "z_axis_display": z_axis_display,
             "time_range": time_range,
-            "wavelength_range": wavelength_range,
-            "variability_range": variability_range
+            "wavelength_range":  wavelength_range,
+            "variability_range": variability_range,
+            "is_demo": use_demo
         }
         t = threading.Thread(target=_run_mast_job, args=(job_id, tmp_zip, form_args), daemon=True)
         t.start()
         return jsonify({"job_id": job_id}), 202
     except Exception as e:
-        logger.error(f"Error starting job: {e}", exc_info=True)
+        logger.error(f"Error starting job:  {e}", exc_info=True)
         return jsonify({"error": str(e)}), 400
-
-
 
 @app.route('/progress/<job_id>')
 def get_progress(job_id):

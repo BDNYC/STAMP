@@ -293,13 +293,52 @@ function computeLockedRibbonRange(spec, bands) {
   const E = spec.errorData || [];
   const ref = spec.referenceSpectrum || null;
   if (!Z.length || !E.length) return null;
+
+  if (spec.bandAveraged && activeBands && activeBands.length >= 1) {
+    let minV = Infinity, maxV = -Infinity;
+    const timeArray = spec.timeData || [];
+
+    for (let bi = 0; bi < activeBands.length; bi++) {
+      const b = activeBands[bi];
+
+      for (let j = 0; j < timeArray.length; j++) {
+        let sum = 0, cnt = 0, esum = 0;
+
+        for (let i = 0; i < wl.length; i++) {
+          const w = wl[i];
+          if (w >= b.start && w <= b.end) {
+            const v = Z[i] && Z[i][j];
+            const e = E[i] && E[i][j];
+            if (v == null || e == null || isNaN(v) || isNaN(e)) continue;
+
+            sum += v;
+            cnt++;
+            esum += e * e;
+          }
+        }
+
+        if (cnt > 0) {
+          const avgFlux = sum / cnt;
+          const avgErr = Math.sqrt(esum / cnt) / Math.sqrt(cnt);
+          const up = avgFlux + avgErr;
+          const lo = avgFlux - avgErr;
+          if (isFinite(up) && up > maxV) maxV = up;
+          if (isFinite(lo) && lo < minV) minV = lo;
+        }
+      }
+    }
+
+    if (! isFinite(minV) || !isFinite(maxV)) return null;
+    const pad = (maxV - minV) * 0.03 || 1e-6;
+    return [minV - pad, maxV + pad];
+  }
+
   let minV = Infinity, maxV = -Infinity;
   for (let i = 0; i < wl.length; i++) {
     for (let j = 0; j < spec.timeData.length; j++) {
       const v = Z[i] && Z[i][j];
       const e = E[i] && E[i][j];
       if (v == null || e == null || isNaN(v) || isNaN(e)) continue;
-      // Errors are already converted to % by the backend when in variability mode
       const s = e;
       const up = v + s;
       const lo = v - s;
@@ -989,7 +1028,7 @@ function showSpectrumAtTime(clickData, plotDiv) {
 }
 
 function updateSpectrumPlot() {
-  if (! currentSpectrumData) { return; }
+  if (!currentSpectrumData) { return; }
 
   const wavelengths = currentSpectrumData.wavelengthData;
   const fluxData = currentSpectrumData.fluxData;
@@ -1009,7 +1048,7 @@ function updateSpectrumPlot() {
     const currentTime = currentSpectrumData.timeData[currentTimeIndex];
     for (let i = 0; i < wavelengths.length; i++) {
       values.push((fluxData[i] && fluxData[i][currentTimeIndex] !== undefined) ? fluxData[i][currentTimeIndex] : NaN);
-      errors.push((errData && errData[i] && errData[i][currentTimeIndex] !== undefined) ? errData[i][currentTimeIndex] : NaN);
+      errors.push((errData && errData[i] && errData[i][currentTimeIndex] !== undefined) ? errData[i][currentTimeIndex] :  NaN);
     }
     xAxisTitle = 'Wavelength (µm)';
     xValues = wavelengths;
@@ -1021,7 +1060,7 @@ function updateSpectrumPlot() {
     if (activeBands && activeBands.length >= 1) {
       xAxisTitle = 'Time (hours)';
       xValues = timeArray;
-      infoPrimary = activeBands.length === 1 ? `Band-integrated series:  ${activeBands[0].name} (${activeBands[0].start.toFixed(2)}–${activeBands[0].end.toFixed(2)} µm)` : `Band-integrated series (${activeBands.length} bands)`;
+      infoPrimary = activeBands.length === 1 ? `Band-integrated series: ${activeBands[0].name} (${activeBands[0].start.toFixed(2)}–${activeBands[0].end.toFixed(2)} µm)` : `Band-integrated series (${activeBands.length} bands)`;
       infoIndex = 1;
       infoTotal = 1;
       currentSpectrumData.bandAveraged = true;
@@ -1033,14 +1072,14 @@ function updateSpectrumPlot() {
       }
       xAxisTitle = 'Time (hours)';
       xValues = timeArray;
-      infoPrimary = `Series at Wavelength:  ${wavelengths[wlIdx].toFixed(4)} µm`;
+      infoPrimary = `Series at Wavelength: ${wavelengths[wlIdx].toFixed(4)} µm`;
       infoIndex = wlIdx + 1;
       infoTotal = totalWavelengthPoints;
     }
   }
 
   if (! currentSpectrumData.bandAveraged) {
-    const validValues = values.filter(v => ! isNaN(v) && v !== null);
+    const validValues = values.filter(v => !isNaN(v) && v !== null);
     if (validValues.length === 0) { return; }
   }
 
@@ -1059,7 +1098,7 @@ function updateSpectrumPlot() {
     template: "plotly_dark",
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor: 'rgba(0,0,0,0)',
-    font: { color:  '#ffffff' },
+    font: { color: '#ffffff' },
     xaxis: { title: xAxisTitle, gridcolor: '#555555', linecolor: '#555555', zeroline: false },
     yaxis: {
       title: yAxisLabel,
@@ -1069,21 +1108,19 @@ function updateSpectrumPlot() {
       range: currentSpectrumData.lockedRibbonRange ?  currentSpectrumData.lockedRibbonRange : [currentSpectrumData.globalMin, currentSpectrumData.globalMax],
       tickformat: yTickFormat
     },
-    margin: { l: 60, r: 40, t: 40, b:  60 },
-    showlegend: false
+    margin: { l: 60, r: 40, t: 40, b: 60 },
+    showlegend:  false
   };
 
   const showErrors = !! document.getElementById('toggleErrorBars') && document.getElementById('toggleErrorBars').checked === true;
 
   function sigmaFor(valuesArr, errsArr, wlIndexForTimeSeries = null) {
-    if (!Array.isArray(errsArr) || !errsArr.length) return errsArr;
+    if (!Array.isArray(errsArr) || ! errsArr.length) return errsArr;
 
     if (currentSpectrumData.bandAveraged && spectrumMode === 'vs_time') {
       return errsArr;
     }
 
-    // Errors are already in the correct units from the backend
-    // No conversion needed
     return errsArr;
   }
 
@@ -1097,7 +1134,7 @@ function updateSpectrumPlot() {
         y: values,
         type: 'scatter',
         mode: 'lines',
-        line: { color:  '#9CA3AF', width: 2 },
+        line: { color: '#9CA3AF', width: 2 },
         opacity: 0.35,
         name: 'Spectrum',
         hoverinfo: 'skip'
@@ -1108,9 +1145,9 @@ function updateSpectrumPlot() {
         y: inY,
         type: 'scatter',
         mode: 'lines',
-        line: { color: '#3B82F6', width:  2 },
+        line: { color: '#3B82F6', width: 2 },
         name: 'In',
-        hovertemplate: `Wavelength: %{x:.4f} µm<br>${yAxisLabel}: %{y: ${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ?  ' %' : ''}<extra></extra>`
+        hovertemplate: `Wavelength: %{x:.4f} µm<br>${yAxisLabel}: %{y: ${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ? ' %' : ''}<extra></extra>`
       };
 
       const traces = [baseTrace, spectrumIn];
@@ -1134,8 +1171,8 @@ function updateSpectrumPlot() {
             lowerSeg.push(inY[k] - sigmaRaw[k]);
           }
           traces.push(
-            { x: xSeg, y: upperSeg, type: 'scatter', mode: 'lines', line:  { width: 0 }, hoverinfo: 'skip', showlegend: false, connectgaps: false },
-            { x:  xSeg, y: lowerSeg, type: 'scatter', mode: 'lines', fill: 'tonexty', fillcolor: 'rgba(239, 68, 68, 0.20)', line: { width: 0 }, hoverinfo:  'skip', showlegend:  false, connectgaps: false }
+            { x: xSeg, y:  upperSeg, type: 'scatter', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false, connectgaps: false },
+            { x: xSeg, y:  lowerSeg, type: 'scatter', mode: 'lines', fill: 'tonexty', fillcolor: 'rgba(239, 68, 68, 0.20)', line: { width: 0 }, hoverinfo: 'skip', showlegend: false, connectgaps:  false }
           );
         }
       }
@@ -1143,8 +1180,8 @@ function updateSpectrumPlot() {
       Plotly.newPlot('spectrumPlot', traces, layout, { responsive: true });
     } else {
       const spectrumTrace = {
-        x:  xValues,
-        y: values,
+        x: xValues,
+        y:  values,
         type: 'scatter',
         mode: 'lines',
         line: { color: '#3B82F6', width: 2 },
@@ -1157,8 +1194,8 @@ function updateSpectrumPlot() {
       if (showErrors) {
         const sigma = sigmaFor(values, errors);
         traces.push(
-          { x: xValues, y: values.map((v, i) => (isFinite(v) && isFinite(sigma[i])) ? v + sigma[i] : null), type: 'scatter', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false, connectgaps:  false },
-          { x: xValues, y: values.map((v, i) => (isFinite(v) && isFinite(sigma[i])) ? v - sigma[i] : null), type: 'scatter', mode: 'lines', fill: 'tonexty', fillcolor: 'rgba(239, 68, 68, 0.20)', line: { width: 0 }, hoverinfo:  'skip', showlegend:  false, connectgaps: false }
+          { x: xValues, y: values.map((v, i) => (isFinite(v) && isFinite(sigma[i])) ? v + sigma[i] :  null), type: 'scatter', mode: 'lines', line:  { width: 0 }, hoverinfo: 'skip', showlegend: false, connectgaps: false },
+          { x:  xValues, y: values.map((v, i) => (isFinite(v) && isFinite(sigma[i])) ? v - sigma[i] : null), type: 'scatter', mode: 'lines', fill: 'tonexty', fillcolor:  'rgba(239, 68, 68, 0.20)', line: { width: 0 }, hoverinfo: 'skip', showlegend: false, connectgaps: false }
         );
       }
 
@@ -1204,23 +1241,13 @@ function updateSpectrumPlot() {
             const w = wavelengths[i];
             if (w >= b.start && w <= b.end) {
               const v = (fluxData[i] && fluxData[i][j] !== undefined) ? fluxData[i][j] : NaN;
-              if (!isFinite(v)) continue;
+              if (! isFinite(v)) continue;
               sum += v;
               cnt++;
 
               if (hasErr) {
                 let sErr = (errData && errData[i] && errData[i][j] !== undefined) ? errData[i][j] : NaN;
-                if (! isFinite(sErr)) continue;
-
-                if (currentSpectrumData.zAxisDisplay === 'variability') {
-                  const ref = currentSpectrumData.referenceSpectrum;
-                  const r = Array.isArray(ref) ? ref[i] : NaN;
-                  if (r && isFinite(r) && r !== 0) {
-                    sErr = (sErr / r) * 100;
-                  } else {
-                    continue;
-                  }
-                }
+                if (!isFinite(sErr)) continue;
 
                 if (isFinite(sErr)) {
                   esum += sErr * sErr;
@@ -1253,7 +1280,7 @@ function updateSpectrumPlot() {
               showlegend: si === 0,
               line:  { color: col, width: 2 },
               legendgroup: `band_${bi}`,
-              hovertemplate: `Time: %{x:.4f} hr<br>${yAxisLabel}: %{y: ${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ? ' %' : ''}<extra></extra>`
+              hovertemplate: `Time: %{x:.4f} hr<br>${yAxisLabel}: %{y:${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ? ' %' : ''}<extra></extra>`
             });
 
             const hasFiniteErrors = eSeg.some(e => isFinite(e));
@@ -1281,16 +1308,16 @@ function updateSpectrumPlot() {
                   line: { width: 0 },
                   hoverinfo: 'skip',
                   showlegend: false,
-                  connectgaps:  false,
+                  connectgaps: false,
                   legendgroup: `band_${bi}`
                 },
                 {
                   x: xSeg,
-                  y:  lowerSeg,
+                  y: lowerSeg,
                   type: 'scatter',
                   mode: 'lines',
-                  fill: 'tonexty',
-                  fillcolor:  fillCol,
+                  fill:  'tonexty',
+                  fillcolor: fillCol,
                   line: { width: 0 },
                   hoverinfo: 'skip',
                   showlegend:  false,
@@ -1309,7 +1336,7 @@ function updateSpectrumPlot() {
             name: b.name,
             line: { color: col, width:  2 },
             legendgroup: `band_${bi}`,
-            hovertemplate: `Time: %{x:.4f} hr<br>${yAxisLabel}: %{y:${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ? ' %' :  ''}<extra></extra>`
+            hovertemplate: `Time: %{x:.4f} hr<br>${yAxisLabel}: %{y:${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ? ' %' : ''}<extra></extra>`
           });
 
           const hasFiniteErrors = eArr.some(e => isFinite(e));
@@ -1332,9 +1359,9 @@ function updateSpectrumPlot() {
               {
                 x: timeArray,
                 y: upper,
-                type: 'scatter',
-                mode: 'lines',
-                line: { width: 0 },
+                type:  'scatter',
+                mode:  'lines',
+                line:  { width: 0 },
                 hoverinfo: 'skip',
                 showlegend: false,
                 connectgaps: false,
@@ -1347,10 +1374,10 @@ function updateSpectrumPlot() {
                 mode: 'lines',
                 fill: 'tonexty',
                 fillcolor: fillCol,
-                line: { width: 0 },
+                line: { width:  0 },
                 hoverinfo: 'skip',
-                showlegend:  false,
-                connectgaps:  false,
+                showlegend: false,
+                connectgaps: false,
                 legendgroup: `band_${bi}`
               }
             );
@@ -1364,7 +1391,7 @@ function updateSpectrumPlot() {
       const gapThresholdHours = 0.5;
       const xValuesTime = xValues;
 
-      if (! currentSpectrumData.useInterpolation) {
+      if (!currentSpectrumData.useInterpolation) {
         const segs = [];
         let s = 0;
         for (let i = 1; i < xValuesTime.length; i++) {
@@ -1385,7 +1412,7 @@ function updateSpectrumPlot() {
             mode: 'lines',
             line: { color: '#3B82F6', width: 2 },
             name: 'Series',
-            hovertemplate:  `Time: %{x:.4f} hr<br>${yAxisLabel}: %{y:${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ? ' %' :  ''}<extra></extra>`,
+            hovertemplate: `Time: %{x:.4f} hr<br>${yAxisLabel}: %{y:${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ?  ' %' : ''}<extra></extra>`,
             connectgaps: false,
             showlegend: false
           });
@@ -1408,7 +1435,7 @@ function updateSpectrumPlot() {
           mode:  'lines',
           line:  { color: '#3B82F6', width: 2 },
           name: 'Series',
-          hovertemplate: `Time: %{x:.4f} hr<br>${yAxisLabel}: %{y:${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ? ' %' : ''}<extra></extra>`
+          hovertemplate:  `Time: %{x:.4f} hr<br>${yAxisLabel}: %{y:${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ? ' %' :  ''}<extra></extra>`
         };
         traces.push(spectrumTrace);
 
@@ -1452,6 +1479,7 @@ function updateSpectrumPlot() {
     document.getElementById('playAnimationBtn').disabled = false;
   }
 }
+
 function navigateSpectrum(step) {
   if (!currentSpectrumData) return;
   if (spectrumMode === 'vs_time' && activeBands.length > 0) return;
