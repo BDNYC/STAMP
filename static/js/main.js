@@ -25,6 +25,8 @@ function collectBands() {
   }).filter(Boolean);
 }
 
+
+
 function updateBandButtonStates() {
   const activeIds = activeBands.map(b => b.id);
   document.querySelectorAll('#surfaceBandButtons [data-band-id], #heatmapBandButtons [data-band-id], #spectrumBandButtons [data-band-id]').forEach(btn => {
