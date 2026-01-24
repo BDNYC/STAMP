@@ -1,0 +1,380 @@
+/*
+========================================
+STAMP Tour Styles
+========================================
+*/
+
+/* Initial Tour Prompt - Fixed Right Side */
+#tourPrompt {
+    position: fixed;
+    right: 30px; /* Fallback if JS fails */
+    top: 50%;
+    transform: translateY(-50%);
+    background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+    border: 2px solid #3b82f6;
+    border-radius: 12px;
+    padding: 16px; /* Reduced from 20px */
+    width: 240px; /* Reduced from 280px */
+    z-index: 10000;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    animation: slideInRight 0.5s ease-out;
+}
+
+/* Responsive adjustment for smaller screens */
+@media (max-width: 1280px) {
+    #tourPrompt {
+        left: auto;
+        right: 30px;
+    }
+}
+
+/* Responsive adjustment for smaller screens */
+@media (max-width: 1280px) {
+    #tourPrompt {
+        right: 30px;
+    }
+}
+
+#tourPrompt h3 {
+    color: #60a5fa;
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+}
+
+#tourPrompt p {
+    color: #e5e7eb;
+    font-size: 14px;
+    margin: 0 0 16px 0;
+    line-height: 1.5;
+}
+
+#tourPrompt .button-group {
+    display: flex;
+    gap: 10px;
+}
+
+#tourPrompt button {
+    flex: 1;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+#tourAcceptBtn {
+    background: #3b82f6;
+    color: white;
+}
+
+#tourAcceptBtn:hover {
+    background: #2563eb;
+    transform: translateY(-2px);
+}
+
+#tourDeclineBtn {
+    background: #374151;
+    color: #e5e7eb;
+}
+
+#tourDeclineBtn:hover {
+    background: #4b5563;
+}
+
+/* Tour Message Box - Positioned Dynamically */
+#tourMessageBox {
+    position: fixed;
+    right: 30px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+    border: 2px solid #3b82f6;
+    border-radius: 12px;
+    padding: 24px;
+    width: 280px;
+    max-width: calc(100vw - 40px);
+    z-index: 10001;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+    animation: fadeIn 0.2s ease-out; /* Faster initial fade */
+    transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1), /* Faster transitions */
+                top 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.15s ease-out;
+    position: relative;
+}
+
+/* Close X button - ADD THIS NEW SECTION */
+.tour-close-x {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+    z-index: 1;
+}
+
+.tour-close-x:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.tour-close-x:active {
+    transform: scale(0.95);
+}
+
+#tourMessageBox .tour-title {
+    color: #60a5fa;
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+    padding-right: 24px; /* Make room for X button */
+    transition: opacity 0.2s ease-out;
+}
+
+#tourMessageBox .tour-message {
+    color: #e5e7eb;
+    font-size: 14px;
+    margin: 0 0 20px 0;
+    line-height: 1.6;
+    transition: opacity 0.2s ease-out;
+}
+
+#tourMessageBox .tour-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+#tourMessageBox button {
+    flex: 1;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+#tourNextBtn {
+    background: #3b82f6;
+    color: white;
+}
+
+#tourNextBtn:hover {
+    background: #2563eb;
+    transform: translateY(-2px);
+}
+
+#tourNextBtn:disabled {
+    background: #374151;
+    cursor: not-allowed;
+    transform: none;
+    opacity: 0.5;
+}
+
+/* Force hide skip button */
+#tourSkipBtn {
+    display: none !important;
+}
+
+#tourPrevBtn {
+    background: #374151;
+    color: #e5e7eb;
+}
+
+#tourPrevBtn:hover {
+    background: #4b5563;
+}
+
+/* Step Counter */
+.tour-step-counter {
+    color: #9ca3af;
+    font-size: 12px;
+    text-align: center;
+    margin-top: 12px;
+}
+
+/* Dark Overlay - transparent base, cutout sections handle darkening */
+#tourOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    z-index: 9998;
+    animation: fadeIn 0.3s ease-out;
+    pointer-events: none;
+}
+
+/* Keep 3D plot visible and colorful during band selection */
+#tourOverlay.preserve-plot {
+    background: rgba(0, 0, 0, 0.7);
+    pointer-events: none;
+}
+
+/* Cut out the plot area from the overlay during band selection */
+#tourOverlay.preserve-plot::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: transparent;
+}
+
+
+/* Highlight Box with White Glow - Just border, no background */
+#tourHighlight {
+    position: absolute;
+    border: 3px solid #ffffff;
+    border-radius: 8px;
+    box-shadow:
+        0 0 20px rgba(255, 255, 255, 0.8),
+        0 0 40px rgba(255, 255, 255, 0.5);
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    pointer-events: auto;
+    z-index: 9999;
+    animation: pulseGlow 2s ease-in-out infinite;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 1;
+}
+
+/* Remove brightening effect for 3D plot to prevent white-out */
+#tourHighlight.highlight-plot {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+#tourHighlight.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+
+/* Allow clicks through highlight on specific elements */
+#tourHighlight.allow-interaction {
+    pointer-events: none;
+}
+
+#tourHighlight.allow-interaction::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: auto;
+}
+
+/* Animations */
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateY(-50%) translateX(50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(-50%) translateX(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes pulseGlow {
+    0%, 100% {
+        box-shadow:
+            0 0 20px rgba(255, 255, 255, 0.8),
+            0 0 40px rgba(255, 255, 255, 0.5);
+    }
+    50% {
+        box-shadow:
+            0 0 25px rgba(255, 255, 255, 0.9),
+            0 0 50px rgba(255, 255, 255, 0.6);
+    }
+}
+
+/* Hidden state */
+.hidden {
+    display: none !important;
+}
+
+/* Restart Tour Button */
+#restartTourBtn {
+    background: transparent;
+    border: 1px solid #4b5563;
+    color: #9ca3af;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+#restartTourBtn:hover {
+    border-color: #3b82f6;
+    color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+}
+
+/* Ensure tour elements stay on top of Plotly modebar */
+#tourMessageBox,
+#tourHighlight,
+#tourOverlay,
+#tourPrompt {
+    z-index: 10000 !important;
+}
+
+#tourMessageBox {
+    z-index: 10001 !important;
+}
+
+/* Prevent horizontal scrollbar */
+body.tour-active {
+    overflow-x: hidden;
+}
+/* Multi-highlight boxes with no background - just borders */
+.tour-multi-highlight {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* Smooth fade for overlay sections */
+.tour-overlay-section {
+    transition: opacity 0.3s ease-out;
+}
+
+/* Smooth fade for multi-highlights */
+.tour-multi-highlight {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    transition: opacity 0.3s ease-out;
+}

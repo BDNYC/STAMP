@@ -425,6 +425,48 @@ const colorScales = [
   { name: 'Picnic',    class: 'picnic' }
 ];
 
+// Position Data Requirements dropdown - stays fixed on scroll
+function positionDataRequirements() {
+    const dataReq = document.getElementById('dataRequirements');
+    const container = document.querySelector('.max-w-4xl');
+
+    if (!dataReq || !container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const dataReqWidth = 256; // w-64 = 16rem = 256px
+
+    // Space available to the left of the container
+    const spaceBeforeContainer = containerRect.left;
+
+    // Center in that space
+    const optimalLeft = (spaceBeforeContainer / 2) - (dataReqWidth / 2);
+
+    // Safety: keep at least 5px from edges
+    const minLeft = 5;
+    const maxLeft = containerRect.left - dataReqWidth - 5;
+
+    const finalLeft = Math.max(minLeft, Math.min(maxLeft, optimalLeft));
+
+    // Only set left position - top and position:fixed are in CSS
+    dataReq.style.left = finalLeft + 'px';
+}
+
+// Call positioning after DOM is fully loaded and on resize
+window.addEventListener('DOMContentLoaded', () => {
+    // Wait a bit for layout to stabilize
+    setTimeout(() => {
+        positionDataRequirements();
+    }, 100);
+
+    window.addEventListener('resize', positionDataRequirements);
+});
+
+// Call on page load and window resize
+document.addEventListener('DOMContentLoaded', () => {
+    positionDataRequirements();
+    window.addEventListener('resize', positionDataRequirements);
+});
+
 function initializeColorScales() {
   const container = document.getElementById('colorscaleSelector');
   colorScales.forEach((scale, index) => {
@@ -744,11 +786,16 @@ async function uploadMastDirectory() {
       createPlot('surfacePlot', surfaceData.data, surfaceData.layout, { responsive: true }),
       createPlot('heatmapPlot', heatmapData.data, heatmapData.layout, { responsive: true })
     ]);
+    // Notify tour that plots are loaded
+window.stampsDataLoaded = true;
 
     Plotly.Plots.resize(document.getElementById('surfacePlot'));
     Plotly.Plots.resize(document.getElementById('heatmapPlot'));
 
-    document.getElementById('plotsContainer').scrollIntoView({ behavior: 'smooth' });
+    // Only auto-scroll if tour is NOT active
+    if (!window.tourActive || typeof window.tourActive !== 'function' || !window.tourActive()) {
+        document.getElementById('plotsContainer').scrollIntoView({ behavior: 'smooth' });
+    }
 
     renderBandButtons();
     setActiveBand(null);
@@ -1765,3 +1812,12 @@ function setupDemoDataHandlers() {
     });
   }
 }
+
+// Initialize Data Requirements positioning
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+        positionDataRequirements();
+    }, 100);
+
+    window.addEventListener('resize', positionDataRequirements);
+});

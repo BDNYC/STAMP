@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tour.css') }}">
     <style>
     .colorscale-option {
         width: 40px;
@@ -105,11 +106,36 @@
 </style>
 </head>
 <body class="bg-gray-900">
+<!-- Tour Elements -->
+<div id="tourPrompt" class="hidden">
+    <h3>Welcome to STAMP!</h3>
+    <p>Want a tour of the features?</p>
+    <div class="button-group">
+        <button id="tourAcceptBtn">Yes please!</button>
+        <button id="tourDeclineBtn">No thanks</button>
+    </div>
+</div>
+
+<div id="tourOverlay" class="hidden"></div>
+<div id="tourHighlight" class="hidden"></div>
+<div id="tourMessageBox" class="hidden">
+
+    <button id="tourCloseBtn" class="tour-close-x" title="Close tour">&times;</button>
+
+    <div class="tour-title" id="tourTitle">Tour Step</div>
+    <div class="tour-message" id="tourMessage">Message goes here</div>
+    <div class="tour-buttons">
+        <button id="tourPrevBtn" class="hidden">Back</button>
+        <button id="tourNextBtn">Next</button>
+    </div>
+    <div class="tour-step-counter" id="tourStepCounter"></div>
+</div>
     <div class="min-h-screen">
         <!-- Header section with JWST background -->
         <div class="header-section">
             <h1 class="text-6xl font-extrabold text-center mb-4 text-blue-500 title-glow">STAMP</h1>
 <h1 class="text-4xl font-bold text-center mb-8 text-blue-400 subtitle-glow">Spectral Time-series Analysis and Mapping Program</h1>
+
 <div class="text-center text-blue-200 text-base mb-4">
     Anthony Muñoz-Perez (<span class="underline">munozanthony196@gmail.com</span>) &amp; Dr. Niall Whiteford (<span class="underline">niallwhiteford@gmail.com</span>)
 </div>
@@ -117,9 +143,9 @@
         </div>
 
         <div class="relative flex justify-center">
-            <!-- LEFT COLUMN - Data Requirements (absolutely positioned) -->
-            <div class="absolute left-0 top-0 flex justify-center" style="width: calc((100vw - 64rem) / 2); max-width: 400px;">
-                <details class="bg-gray-700/50 border border-gray-600 rounded-lg w-64">
+    <!-- LEFT COLUMN - Data Requirements (absolutely positioned) -->
+    <div id="dataRequirementsContainer" class="absolute left-0 top-0 flex justify-center" style="width: calc((100vw - 64rem) / 2); max-width: 400px;">
+        <details id="dataRequirements" class="bg-gray-700/50 border border-gray-600 rounded-lg w-64">
                     <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-blue-300 hover:bg-gray-700/70 transition rounded-lg">
                         📋 Data Requirements
                     </summary>
@@ -226,7 +252,7 @@
                     </div>
                     <p class="mt-2 text-xs text-gray-500">Choose whether to display flux variability as percentage or raw flux values</p>
                 </div>
-                <div class="mb-6 space-y-4">
+                <div id="dataRangesSection" class="mb-6 space-y-4">
                     <h3 class="text-lg font-medium text-blue-300">Data Ranges</h3>
                     <div>
                         <label class="block text-sm font-medium mb-2 text-gray-300">Time Range (hours)</label>
@@ -262,11 +288,11 @@
                         <p class="mt-1 text-xs text-gray-500">Set the Z-axis range.    For variability:    enter %, for flux:   enter actual values.  Leave empty for automatic range.</p>
                     </div>
                 </div>
-                <div class="mb-6">
+                <div id="colorScaleSection" class="mb-6">
                     <label class="block text-sm font-medium mb-2 text-gray-300">Color Scale</label>
                     <div id="colorscaleSelector" class="flex flex-wrap gap-2"></div>
                 </div>
-                <div class="mb-6">
+                <div id="customBandsSection" class="mb-6">
                     <h3 class="text-lg font-medium mb-3 text-blue-300">Custom Bands</h3>
                     <div id="customBands" class="mb-3"></div>
                     <button id="addBandBtn"
@@ -369,5 +395,7 @@
         </div>
     </div>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tour.js') }}?v={{ range(1, 10000) | random }}"></script>
+
 </body>
 </html>
