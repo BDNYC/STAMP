@@ -425,47 +425,64 @@ const colorScales = [
   { name: 'Picnic',    class: 'picnic' }
 ];
 
-// Position Data Requirements dropdown - stays fixed on scroll
+// Replace the positionDataRequirements function with this corrected version:
+
 function positionDataRequirements() {
-    const dataReq = document.getElementById('dataRequirements');
-    const container = document.querySelector('.max-w-4xl');
+  const container = document.getElementById('dataRequirementsContainer');
+  const mainContent = document.querySelector('.max-w-4xl');
+  if (!container || !mainContent) return;
 
-    if (!dataReq || !container) return;
+  // detach so it doesn't affect centering
+  if (!container.dataset.detached) {
+    document.body.appendChild(container);
+    container.dataset.detached = '1';
+  }
 
-    const containerRect = container.getBoundingClientRect();
-    const dataReqWidth = 256; // w-64 = 16rem = 256px
+  const mainRect = mainContent.getBoundingClientRect();
+  const containerWidth = container.offsetWidth || 256;
 
-    // Space available to the left of the container
-    const spaceBeforeContainer = containerRect.left;
+  // MORE LEFT (bigger gap)
+  const GAP = 48;          // was 24
+  const MIN_LEFT = 16;
 
-    // Center in that space
-    const optimalLeft = (spaceBeforeContainer / 2) - (dataReqWidth / 2);
+  // DO NOT FOLLOW SCROLL: absolute position in *document* coordinates
+  const OFFSET_Y = 0;      // set to e.g. 20 if you want it a bit lower than the form top
+  const docTop = Math.round(window.scrollY + mainRect.top + OFFSET_Y);
 
-    // Safety: keep at least 5px from edges
-    const minLeft = 5;
-    const maxLeft = containerRect.left - dataReqWidth - 5;
+  container.style.position = 'absolute';
+  container.style.setProperty('top', `${docTop}px`, 'important');
+  container.style.setProperty('z-index', '1000', 'important');
 
-    const finalLeft = Math.max(minLeft, Math.min(maxLeft, optimalLeft));
+  let left = Math.round(mainRect.left + window.scrollX - GAP - containerWidth);
 
-    // Only set left position - top and position:fixed are in CSS
-    dataReq.style.left = finalLeft + 'px';
+  if (left >= MIN_LEFT) {
+    container.style.setProperty('left', `${left}px`, 'important');
+    container.style.setProperty('transform', 'none', 'important');
+    container.style.setProperty('width', 'auto', 'important');
+  } else {
+    container.style.setProperty('left', '16px', 'important');
+    container.style.setProperty('transform', 'none', 'important');
+    container.style.setProperty('width', 'min(90vw, 256px)', 'important');
+  }
 }
 
-// Call positioning after DOM is fully loaded and on resize
+
+
+// // Call positioning after DOM is fully loaded and on resize
+// window.addEventListener('DOMContentLoaded', () => {
+//     // Wait a bit for layout to stabilize
+//     setTimeout(() => {
+//         positionDataRequirements();
+//     }, 100);
+//
+//     window.addEventListener('resize', positionDataRequirements);
+// });
+
 window.addEventListener('DOMContentLoaded', () => {
-    // Wait a bit for layout to stabilize
-    setTimeout(() => {
-        positionDataRequirements();
-    }, 100);
-
-    window.addEventListener('resize', positionDataRequirements);
+  setTimeout(positionDataRequirements, 0);
+  window.addEventListener('resize', positionDataRequirements);
 });
 
-// Call on page load and window resize
-document.addEventListener('DOMContentLoaded', () => {
-    positionDataRequirements();
-    window.addEventListener('resize', positionDataRequirements);
-});
 
 function initializeColorScales() {
   const container = document.getElementById('colorscaleSelector');
@@ -1714,7 +1731,12 @@ async function downloadAllWithVideo(e) {
     URL.revokeObjectURL(url);
   } catch (err) {
     console.error(err);
-    alert(err.message || 'Failed to prepare video download.');
+    // Show a more friendly message if it's the ffmpeg warning
+    if (err.message && err.message.includes('ffmpeg')) {
+      alert('Download completed, but video generation was skipped (ffmpeg not available on server).');
+    } else {
+      alert(err.message || 'Failed to prepare video download.');
+    }
   } finally {
     if (link && originalText) { link.textContent = originalText; link.classList.remove('opacity-70'); }
   }
@@ -1814,10 +1836,10 @@ function setupDemoDataHandlers() {
 }
 
 // Initialize Data Requirements positioning
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(() => {
-        positionDataRequirements();
-    }, 100);
-
-    window.addEventListener('resize', positionDataRequirements);
-});
+// document.addEventListener('DOMContentLoaded', function() {
+//     setTimeout(() => {
+//         positionDataRequirements();
+//     }, 100);
+//
+//     window.addEventListener('resize', positionDataRequirements);
+// });

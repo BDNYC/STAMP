@@ -190,9 +190,14 @@ These provide a visual cue for users when selecting a colorscale.
         0 0 24px rgba(59, 130, 246, 0.3);
 }
 
-/* Fix Data Requirements to viewport */
+/* Data Requirements container: JS controls top/left; CSS only styles/z-index */
+#dataRequirementsContainer {
+  position: fixed;
+  z-index: 1000;
+}
+
+
 #dataRequirements {
-    position: absolute !important;
-    top: 0 !important;
-    z-index: 1000 !important;
+    background: rgba(55, 65, 81, 0.5) !important;
+    backdrop-filter: blur(8px);
 }

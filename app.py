@@ -1082,20 +1082,31 @@ def download_plots():
 def upload_spectrum_frames():
     import subprocess, tempfile, os, shutil, time, uuid, json
     from flask import jsonify, request
+
     fps = int(request.form.get('fps', 10))
     crf = int(request.form.get('crf', 22))
     files = request.files.getlist('frames')
+
     if not files:
         return jsonify({"error": "no frames provided"}), 400
+
     ffmpeg = shutil.which('ffmpeg')
     if not ffmpeg:
-        return jsonify({"error": "ffmpeg not found on server PATH"}), 500
+        # Return a warning instead of an error - video will be skipped
+        return jsonify({
+            "warning": "ffmpeg not available on server - video generation skipped",
+            "video_token": None,
+            "success": True
+        }), 200
+
     tmpdir = tempfile.mkdtemp(prefix='spectrum_frames_')
     try:
         for i, f in enumerate(files):
             f.save(os.path.join(tmpdir, f"frame_{i:05d}.png"))
+
         ts = time.strftime("%Y%m%d_%H%M%S")
         outpath = os.path.join(tempfile.gettempdir(), f"spectrum_{ts}.mp4")
+
         cmd = [
             ffmpeg, "-y",
             "-framerate", str(fps),
@@ -1106,14 +1117,25 @@ def upload_spectrum_frames():
             "-movflags", "+faststart",
             outpath
         ]
-        r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if r.returncode != 0:
-            return jsonify({"error": r.stderr.decode("utf-8", "ignore")[:2000]}), 500
-        token = uuid.uuid4().hex
-        token_path = os.path.join(tempfile.gettempdir(), f"spectrum_token_{token}.txt")
-        with open(token_path, "w", encoding="utf-8") as fp:
-            fp.write(outpath)
-        return jsonify({"ok": True, "token": token})
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+
+        if result.returncode != 0:
+            return jsonify({"error": f"ffmpeg failed: {result.stderr}"}), 500
+
+        if not os.path.exists(outpath):
+            return jsonify({"error": "output file not created"}), 500
+
+        token = str(uuid.uuid4())
+        globals()[f'_video_tmp_{token}'] = outpath
+        globals()['latest_spectrum_mp4_path'] = outpath
+
+        return jsonify({"video_token": token, "success": True})
+
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "ffmpeg timed out"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 

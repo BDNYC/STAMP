@@ -26,7 +26,26 @@ const tourSteps = [
         action: null,
         skipScroll: false
     },
-
+    {
+        id: 'linear-interpolation',
+        element: '#linearInterpolation',
+        title: 'Linear Interpolation',
+        message: 'Enable this to interpolate data across time for smoother visualizations and filled gaps between observations.',
+        position: 'right',
+        waitFor: null,
+        action: null,
+        skipScroll: false
+    },
+    {
+        id: 'z-axis-display',
+        element: '#zAxisDisplaySection',
+        title: 'Z-Axis Display Options',
+        message: 'Choose what the z-axis represents: flux or variability. This changes how the 3D surface plot visualizes your data.',
+        position: 'right',
+        waitFor: null,
+        action: null,
+        skipScroll: false
+    },
     {
         id: 'data-ranges',
         element: '#dataRangesSection',
@@ -45,15 +64,15 @@ const tourSteps = [
         waitFor: null,
         action: null
     },
-        {
-        id: 'custom-bands',
-        element: '#customBandsSection',
-        title: 'Custom Bands',
-        message: 'Another way to isolate sections of data. Two bands are already preloaded. Let\'s leave just those for now. We\'ll see these in action later',
-        position: 'right',
-        waitFor: null,
-        action: null,
-
+    {
+    id: 'custom-bands',
+    element: '#customBandsSection',
+    title: 'Custom Bands',
+    message: 'Another way to isolate sections of data. Two bands are already preloaded. Let\'s leave just those for now. We\'ll see these in action later',
+    position: 'right',
+    waitFor: null,
+    action: null,
+    skipScroll: false
     },
     {
         id: 'compile-button',
@@ -95,7 +114,6 @@ const tourSteps = [
         skipScroll: true,
         highlightMultiple: ['#surfacePlot', '#surfaceBandButtons']
     },
-
     {
         id: 'enable-click',
         element: '#enableSurfaceClick',
@@ -108,7 +126,6 @@ const tourSteps = [
         skipScroll: true,
         highlightMultiple: ['#surfacePlot', '#enableSurfaceClick']
     },
-
     {
         id: 'spectrum-viewer',
         element: '#spectrumContainer',
@@ -140,6 +157,17 @@ const tourSteps = [
         action: null,
         skipScroll: true,
         highlightMultiple: ['#spectrumContainer', '#toggleErrorBars']
+    },
+    {
+        id: 'navigation-controls',
+        element: '#prevSpectrumBtn',
+        title: 'Navigate & Animate',
+        message: 'Use Previous and Next to move between 2D spectral views, or hit Play to animate through them. The spectrum viewer lets you explore each time point in detail.',
+        position: 'right',
+        waitFor: null,
+        action: null,
+        skipScroll: true,
+        highlightMultiple: ['#spectrumContainer', '#prevSpectrumBtn', '#nextSpectrumBtn', '#playAnimationBtn']
     },
     {
         id: 'x-axis-switch',
@@ -184,17 +212,28 @@ const tourSteps = [
         skipScroll: true,
         highlightMultiple: ['#heatmapPlot', '#heatmapBandButtons']
     },
-        {
+    {
+    id: 'download-graphs',
+    element: 'a[href="/download_plots"]',
+    title: 'Download Your Graphs',
+    message: 'Click here to download all plots at once, or use the camera icon in the Plotly toolbar when hovering over individual plots.',
+    position: 'right',
+    waitFor: null,
+    action: null,
+    skipScroll: false
+    },
+    {
         id: 'tour-complete',
         element: null,
         title: 'Tour Complete!',
-                message: 'You\'re all set! Feel free to explore on your own.',
+        message: 'You\'re all set! Feel free to explore on your own.',
         position: 'center',
         waitFor: null,
         action: null,
         isEnd: true
     }
 ];
+
 
 // Initialize tour on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -638,28 +677,12 @@ function scrollToElement(element) {
 
     // Get current step to determine message box position
     const step = tourSteps[currentStep];
-    const messageBoxHeight = 300; // Approximate height of message box
     const topMargin = 100; // Space at top of viewport
-    const bottomMargin = 100; // Space at bottom of viewport
+    const bottomMargin = 150; // Space at bottom of viewport (increased for message box)
 
     let targetScroll;
 
-    if (step && step.position === 'right') {
-        // Message box is on the right side (vertically centered)
-        // Need to ensure element is vertically centered in viewport
-        const elementCenter = (absoluteElementTop + absoluteElementBottom) / 2;
-        targetScroll = elementCenter - (viewportHeight / 2);
-    } else if (step && step.position === 'left') {
-        // Message box is on the left side (vertically centered)
-        // Need to ensure element is vertically centered in viewport
-        const elementCenter = (absoluteElementTop + absoluteElementBottom) / 2;
-        targetScroll = elementCenter - (viewportHeight / 2);
-    } else {
-        // Default: position element near top with margin
-        targetScroll = absoluteElementTop - topMargin;
-    }
-
-    // Check if current scroll position is already good enough
+    // Check if element is already fully visible with margins
     const elementTopInView = elementRect.top >= topMargin;
     const elementBottomInView = elementRect.bottom <= viewportHeight - bottomMargin;
 
@@ -667,14 +690,49 @@ function scrollToElement(element) {
         return; // Element is already well positioned
     }
 
-    // Ensure we don't scroll past the top of the page
-    targetScroll = Math.max(0, targetScroll);
+    // Calculate document bounds
+    const documentHeight = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight
+    );
+    const maxScroll = Math.max(0, documentHeight - viewportHeight);
+
+    // For elements near the bottom of the page, use gentle scrolling
+    const elementDistanceFromBottom = documentHeight - absoluteElementBottom;
+    const isNearBottom = elementDistanceFromBottom < viewportHeight * 0.5;
+
+    if (isNearBottom) {
+        // Element is near bottom - scroll just enough to show it with margin
+        // Try to keep the top of the element visible with top margin
+        targetScroll = Math.min(
+            absoluteElementTop - topMargin,
+            absoluteElementBottom - viewportHeight + bottomMargin
+        );
+
+        // Make sure we don't scroll past the max
+        targetScroll = Math.max(0, Math.min(targetScroll, maxScroll));
+    } else if (step && step.position === 'right') {
+        // Message box is on the right side (vertically centered)
+        const elementCenter = (absoluteElementTop + absoluteElementBottom) / 2;
+        targetScroll = elementCenter - (viewportHeight / 2);
+        targetScroll = Math.max(0, Math.min(targetScroll, maxScroll));
+    } else if (step && step.position === 'left') {
+        // Message box is on the left side (vertically centered)
+        const elementCenter = (absoluteElementTop + absoluteElementBottom) / 2;
+        targetScroll = elementCenter - (viewportHeight / 2);
+        targetScroll = Math.max(0, Math.min(targetScroll, maxScroll));
+    } else {
+        // Default: position element near top with margin
+        targetScroll = absoluteElementTop - topMargin;
+        targetScroll = Math.max(0, Math.min(targetScroll, maxScroll));
+    }
 
     window.scrollTo({
         top: targetScroll,
         behavior: 'smooth'
     });
 }
+
 
 function highlightElement(element) {
     const highlight = document.getElementById('tourHighlight');
@@ -831,7 +889,7 @@ function positionMessageBox(element, position) {
     }
 
     // Special handling for spectrum-viewer step and all subsequent spectrum steps
-    const spectrumSteps = ['spectrum-viewer', 'spectrum-bands', 'error-bars', 'x-axis-switch', 'time-mode-bands'];
+    const spectrumSteps = ['spectrum-viewer', 'spectrum-bands', 'error-bars', 'navigation-controls', 'x-axis-switch', 'time-mode-bands'];
     const heatmapSteps = ['heatmap', 'heatmap-bands'];
 
     if (step && (spectrumSteps.includes(step.id) || heatmapSteps.includes(step.id))) {

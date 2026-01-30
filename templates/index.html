@@ -144,9 +144,9 @@
 
         <div class="relative flex justify-center">
     <!-- LEFT COLUMN - Data Requirements (absolutely positioned) -->
-    <div id="dataRequirementsContainer" class="absolute left-0 top-0 flex justify-center" style="width: calc((100vw - 64rem) / 2); max-width: 400px;">
-        <details id="dataRequirements" class="bg-gray-700/50 border border-gray-600 rounded-lg w-64">
-                    <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-blue-300 hover:bg-gray-700/70 transition rounded-lg">
+    <div id="dataRequirementsContainer" class="left-0 top-0 flex justify-center items-center content-center" style="width: calc((100vw - 64rem) / 2); max-width: 400px;">
+        <details id="dataRequirements" class="bg-gray-700/50 justify-center items-center border border-gray-600 rounded-lg w-64">
+                    <summary class="cursor-pointer px-4 py-3 text-sm justify-center items-center font-medium text-blue-300 hover:bg-gray-700/70 transition rounded-lg">
                         📋 Data Requirements
                     </summary>
                     <div class="px-4 py-3 text-sm text-gray-300 space-y-2">
@@ -236,7 +236,7 @@
                                   focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <p class="mt-1 text-xs text-gray-500">Limit the number of integrations plotted (evenly sampled). Leave empty or set higher than total to plot all.    </p>
                 </div>
-                <div class="mb-6">
+                <div id="zAxisDisplaySection" class="mb-6">
                     <h3 class="text-lg font-medium mb-3 text-blue-300">Z-axis Display</h3>
                     <div class="space-y-2">
                         <label class="flex items-center cursor-pointer">
