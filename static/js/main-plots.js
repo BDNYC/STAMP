@@ -190,10 +190,15 @@ function applyBandToPlot(plotId, bands) {
       }
       const base = {};
       for (const k in trace) if (k !== 'z') base[k] = trace[k];
-      // White ghost layer (out-of-band)
-      newData.push({ ...base, z: outZ, showscale: false, opacity: 0.08, colorscale: [[0,'#fff'],[1,'#fff']], hoverongaps: false });
-      // Colored layer (in-band) rendered on top with original hover
-      newData.push({ ...base, z: inZ, hoverongaps: false });
+      if (isHeatmap) {
+        // Heatmap ghost: light grey at full opacity so it looks like faded data
+        newData.push({ ...base, z: outZ, showscale: false, colorscale: [[0,'#2a2a2e'],[1,'#3a3a40']], hoverinfo: 'skip', hoverongaps: false });
+        newData.push({ ...base, z: inZ, hoverongaps: false });
+      } else {
+        // Surface ghost: white at low opacity
+        newData.push({ ...base, z: outZ, showscale: false, opacity: 0.08, colorscale: [[0,'#fff'],[1,'#fff']], hoverongaps: false });
+        newData.push({ ...base, z: inZ, hoverongaps: false });
+      }
     } else {
       newData.push(trace);
     }
