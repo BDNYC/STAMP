@@ -23,6 +23,70 @@
 console.log(' TOUR-CORE.JS LOADED');
 
 // ---------------------------------------------------------------------------
+// Timer & state tracking — cleared on every step transition and tour end
+// ---------------------------------------------------------------------------
+
+/** @type {number|null} Interval ID from waitForCondition(), cleared on step change */
+let activeWaitInterval = null;
+
+/** @type {number|null} Timeout ID from autoNext setTimeout, cleared on step change */
+let autoNextTimeout = null;
+
+/** @type {number|null} Timeout ID for the highlight/position delay after scrolling */
+let highlightTimeout = null;
+
+/** @type {number|null} rAF ID for scroll-settled detection loop */
+let scrollCheckRafId = null;
+
+/** @type {boolean} True when the end step is displayed; makes Next call endTour() */
+let isOnEndStep = false;
+
+/** @type {boolean} True when user pressed Back; suppresses waitFor/autoNext on the target step */
+let navigatingBack = false;
+
+/**
+ * Cancel any running waitForCondition interval and autoNext timeout.
+ * Called at the start of every showStep() and in endTour()/startTour().
+ */
+function clearActiveTimers() {
+    if (activeWaitInterval !== null) {
+        clearInterval(activeWaitInterval);
+        activeWaitInterval = null;
+    }
+    if (autoNextTimeout !== null) {
+        clearTimeout(autoNextTimeout);
+        autoNextTimeout = null;
+    }
+    if (highlightTimeout !== null) {
+        clearTimeout(highlightTimeout);
+        highlightTimeout = null;
+    }
+    if (scrollCheckRafId !== null) {
+        cancelAnimationFrame(scrollCheckRafId);
+        scrollCheckRafId = null;
+    }
+}
+
+/**
+ * Synchronously check whether a waitFor condition is already satisfied.
+ *
+ * @param {string} condition - 'plotsLoaded' or 'spectrumOpened'
+ * @returns {boolean} True if the condition is already met right now.
+ */
+function isConditionCurrentlyMet(condition) {
+    if (condition === 'plotsLoaded') {
+        return window.stampsDataLoaded === true;
+    }
+    if (condition === 'spectrumOpened') {
+        const spectrumContainer = document.getElementById('spectrumContainer');
+        const checkbox = document.getElementById('enableSurfaceClick');
+        return !!(checkbox && checkbox.checked &&
+            spectrumContainer && !spectrumContainer.classList.contains('hidden'));
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
 // Initialization — runs once when the DOM is ready
 // ---------------------------------------------------------------------------
 
@@ -153,6 +217,17 @@ function startTour() {
     tourActive = true;
     currentStep = 0;
 
+    // Clean up state from any previous tour run
+    clearActiveTimers();
+    isOnEndStep = false;
+    navigatingBack = false;
+
+    // Remove any lingering onclick handler left by showEndStep from a prior tour
+    const nextBtn = document.getElementById('tourNextBtn');
+    if (nextBtn) {
+        nextBtn.onclick = null;
+    }
+
     // Clear any active focus from form elements
     if (document.activeElement && document.activeElement.blur) {
         document.activeElement.blur();
@@ -206,6 +281,14 @@ function declineTour() {
  * @param {number} stepIndex - Zero-based index into the tourSteps array.
  */
 function showStep(stepIndex) {
+    // --- 0. Clean up timers and state from the previous step ---
+    clearActiveTimers();
+    isOnEndStep = false;
+
+    // Capture and clear the back-navigation flag
+    const isBackNavigation = navigatingBack;
+    navigatingBack = false;
+
     const step = tourSteps[stepIndex];
 
     // --- 1. Validation ---
@@ -267,11 +350,33 @@ function showStep(stepIndex) {
                 element.blur();
             }
 
-            // Force layout recalculation
-            element.getBoundingClientRect();
-            const rect = element.getBoundingClientRect();
+            // When step highlights multiple elements, compute a combined
+            // bounding rect so the scroll and visibility check cover the
+            // full highlighted region (not just the primary element).
+            let rect;
+            if (step.highlightMultiple && Array.isArray(step.highlightMultiple)) {
+                const rects = step.highlightMultiple
+                    .map(sel => document.querySelector(sel))
+                    .filter(Boolean)
+                    .map(el => el.getBoundingClientRect());
+                if (rects.length > 0) {
+                    rect = {
+                        top: Math.min(...rects.map(r => r.top)),
+                        left: Math.min(...rects.map(r => r.left)),
+                        bottom: Math.max(...rects.map(r => r.bottom)),
+                        right: Math.max(...rects.map(r => r.right))
+                    };
+                    rect.width = rect.right - rect.left;
+                    rect.height = rect.bottom - rect.top;
+                } else {
+                    rect = element.getBoundingClientRect();
+                }
+            } else {
+                element.getBoundingClientRect(); // force layout
+                rect = element.getBoundingClientRect();
+            }
 
-            // Check if element is already fully visible in the viewport
+            // Check if the target region is already fully visible
             const isInView = (
                 rect.top >= 0 &&
                 rect.left >= 0 &&
@@ -279,25 +384,79 @@ function showStep(stepIndex) {
                 rect.right <= (window.innerWidth || document.documentElement.clientWidth)
             );
 
-            // Only scroll if element is off-screen and skipScroll is not set
-            if (!step.skipScroll && !isInView) {
-                scrollToElement(element);
+            // On back-navigation, ignore skipScroll — the user may have
+            // scrolled far away and needs to see the target element.
+            const shouldSkipScroll = step.skipScroll && !isBackNavigation;
+
+            // Only scroll if target is off-screen and skipScroll is not active.
+            // When highlightMultiple is set, scroll to center the combined
+            // region rather than just the primary element.
+            const needsScroll = !shouldSkipScroll && !isInView;
+            if (needsScroll) {
+                if (step.highlightMultiple && Array.isArray(step.highlightMultiple)) {
+                    // Scroll to center the combined bounding box
+                    const scrollTop = window.pageYOffset;
+                    const viewportHeight = window.innerHeight;
+                    const absTop = rect.top + scrollTop;
+                    const absBottom = rect.bottom + scrollTop;
+                    const regionCenter = (absTop + absBottom) / 2;
+                    const targetScroll = Math.max(0, regionCenter - (viewportHeight / 2));
+                    window.scrollTo({ top: targetScroll, behavior: 'smooth' });
+                } else {
+                    scrollToElement(element);
+                }
             }
 
-            // Shorter delay if no scroll was needed
-            const delay = (!step.skipScroll && !isInView) ? 200 : 0;
-
-            setTimeout(() => {
-                // Highlight: single element or multiple simultaneous highlights
+            // Helper: highlight elements and position the message box.
+            const doHighlightAndPosition = () => {
                 if (step.highlightMultiple && Array.isArray(step.highlightMultiple)) {
                     highlightMultipleElements(step.highlightMultiple);
                 } else {
                     highlightElement(element);
                 }
-
-                // Position the message box relative to the highlighted element
                 positionMessageBox(element, step.position);
-            }, delay);
+                // Re-enable CSS transitions after positioning
+                if (messageBox) {
+                    requestAnimationFrame(() => {
+                        messageBox.style.transition = '';
+                    });
+                }
+            };
+
+            if (needsScroll) {
+                // Suppress CSS transition so the message box snaps to the
+                // new position instead of animating from the previous
+                // step's (possibly off-screen) location.
+                if (messageBox) messageBox.style.transition = 'none';
+
+                // Wait for smooth scroll to actually finish before
+                // positioning.  Poll via rAF until scroll stops moving.
+                let lastY = window.pageYOffset;
+                let stableFrames = 0;
+
+                const checkSettled = () => {
+                    const y = window.pageYOffset;
+                    if (y === lastY) {
+                        stableFrames++;
+                        if (stableFrames >= 5) {
+                            scrollCheckRafId = null;
+                            doHighlightAndPosition();
+                            return;
+                        }
+                    } else {
+                        stableFrames = 0;
+                        lastY = y;
+                    }
+                    scrollCheckRafId = requestAnimationFrame(checkSettled);
+                };
+
+                // Small delay to let the smooth scroll animation start
+                highlightTimeout = setTimeout(() => {
+                    scrollCheckRafId = requestAnimationFrame(checkSettled);
+                }, 50);
+            } else {
+                doHighlightAndPosition();
+            }
         }
     } else {
         // No element to highlight — center the message box on screen
@@ -311,21 +470,37 @@ function showStep(stepIndex) {
 
     // --- 8. Wait conditions ---
     if (step.waitFor) {
-        // Disable Next button while waiting
-        if (nextBtn) {
-            nextBtn.disabled = true;
-            nextBtn.textContent = 'Waiting...';
-        }
-        waitForCondition(step.waitFor, () => {
+        const alreadyMet = isConditionCurrentlyMet(step.waitFor);
+
+        if (isBackNavigation || alreadyMet) {
+            // Back-navigation or condition already satisfied:
+            // Just enable Next immediately — do NOT auto-advance.
             if (nextBtn) {
                 nextBtn.disabled = false;
                 nextBtn.textContent = 'Next';
             }
-            // Auto-advance after a short delay if configured
-            if (step.autoNext === true) {
-                setTimeout(nextStep, 1500);
+        } else {
+            // Condition not yet met — disable Next and start polling.
+            if (nextBtn) {
+                nextBtn.disabled = true;
+                nextBtn.textContent = 'Waiting...';
             }
-        });
+            waitForCondition(step.waitFor, () => {
+                // Guard: if the user navigated away before the condition
+                // resolved, ignore this stale callback.
+                if (currentStep !== stepIndex) return;
+
+                if (nextBtn) {
+                    nextBtn.disabled = false;
+                    nextBtn.textContent = 'Next';
+                }
+                // Auto-advance only when the condition transitioned
+                // from false to true while the user was watching.
+                if (step.autoNext === true) {
+                    autoNextTimeout = setTimeout(nextStep, 1500);
+                }
+            });
+        }
     } else {
         // No wait — ensure Next button is enabled
         if (nextBtn) {
@@ -359,6 +534,12 @@ function updateStepCounter(stepIndex) {
  * Advance to the next tour step, or end the tour if on the last step.
  */
 function nextStep() {
+    // If we are on the end step, "Next" means "Finish" — end the tour.
+    if (isOnEndStep) {
+        endTour();
+        return;
+    }
+
     currentStep++;
     if (currentStep < tourSteps.length) {
         showStep(currentStep);
@@ -373,6 +554,7 @@ function nextStep() {
 function prevStep() {
     if (currentStep > 0) {
         currentStep--;
+        navigatingBack = true;
         showStep(currentStep);
     }
 }
@@ -406,11 +588,14 @@ function showEndStep() {
         messageBox.style.transform = 'translate(-50%, -50%)';
     }
 
-    // Change Next button to "Finish"
+    // Change Next button to "Finish" and set flag for nextStep() to check.
+    // DO NOT use nextBtn.onclick — it coexists with the addEventListener
+    // handler and causes both nextStep() and endTour() to fire.
     if (nextBtn) {
         nextBtn.textContent = 'Finish';
-        nextBtn.onclick = endTour;
+        nextBtn.disabled = false;
     }
+    isOnEndStep = true;
 
     // Hide back button (close X stays visible)
     if (prevBtn) prevBtn.classList.add('hidden');
@@ -430,6 +615,19 @@ function showEndStep() {
  */
 function endTour() {
     tourActive = false;
+
+    // Cancel any running timers from the last step
+    clearActiveTimers();
+    isOnEndStep = false;
+    navigatingBack = false;
+
+    // Remove any onclick handler that showEndStep may have set and reset button
+    const nextBtn = document.getElementById('tourNextBtn');
+    if (nextBtn) {
+        nextBtn.onclick = null;
+        nextBtn.disabled = false;
+        nextBtn.textContent = 'Next';
+    }
 
     // Clear cached positions
     window.surfacePlotMessagePosition = null;
@@ -492,22 +690,30 @@ function endTour() {
  * @param {Function} callback  - Called once the condition is satisfied.
  */
 function waitForCondition(condition, callback) {
+    // Clear any previously running wait interval (safety net)
+    if (activeWaitInterval !== null) {
+        clearInterval(activeWaitInterval);
+        activeWaitInterval = null;
+    }
+
     if (condition === 'plotsLoaded') {
-        const checkInterval = setInterval(() => {
+        activeWaitInterval = setInterval(() => {
             if (window.stampsDataLoaded === true) {
-                clearInterval(checkInterval);
+                clearInterval(activeWaitInterval);
+                activeWaitInterval = null;
                 callback();
             }
         }, 500);
     } else if (condition === 'spectrumOpened') {
-        const checkInterval = setInterval(() => {
+        activeWaitInterval = setInterval(() => {
             const spectrumContainer = document.getElementById('spectrumContainer');
             const checkbox = document.getElementById('enableSurfaceClick');
 
             // Only proceed if checkbox is checked AND spectrum viewer is visible
             if (checkbox && checkbox.checked &&
                 spectrumContainer && !spectrumContainer.classList.contains('hidden')) {
-                clearInterval(checkInterval);
+                clearInterval(activeWaitInterval);
+                activeWaitInterval = null;
                 // Small delay to ensure everything is rendered
                 setTimeout(callback, 300);
             }
