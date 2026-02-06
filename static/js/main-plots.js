@@ -190,10 +190,10 @@ function applyBandToPlot(plotId, bands) {
       }
       const base = {};
       for (const k in trace) if (k !== 'z') base[k] = trace[k];
-      // Gray layer (out-of-band) rendered underneath at low opacity
-      newData.push({ ...base, z: outZ, name: (trace.name || '') + ' Gray', showscale: false, opacity: 0.35, colorscale: [[0,'#888'],[1,'#888']], hoverinfo: 'skip', hoverongaps: false });
-      // Colored layer (in-band) rendered on top
-      newData.push({ ...base, z: inZ, name: trace.name, hoverongaps: false });
+      // White ghost layer (out-of-band)
+      newData.push({ ...base, z: outZ, showscale: false, opacity: 0.08, colorscale: [[0,'#fff'],[1,'#fff']], hoverongaps: false });
+      // Colored layer (in-band) rendered on top with original hover
+      newData.push({ ...base, z: inZ, hoverongaps: false });
     } else {
       newData.push(trace);
     }

@@ -187,24 +187,8 @@ function displayMetadata(metadata) {
  * @param {string} message - Initial status message (e.g. 'Queued...').
  */
 function showProgress(message) {
-  const btn = document.getElementById('uploadMastBtn');
-  let wrap = document.getElementById('progressWrap');
-  if (!wrap) {
-    wrap = document.createElement('div');
-    wrap.id = 'progressWrap';
-    wrap.className = 'mt-4';
-    wrap.innerHTML = `
-      <div class="w-full h-2 bg-gray-700 rounded overflow-hidden">
-        <div id="progressInner" class="h-2 bg-blue-500" style="width:0%"></div>
-      </div>
-      <div class="flex justify-between mt-1">
-        <p id="progressMsg" class="text-xs text-gray-300"></p>
-        <p id="progressPct" class="text-xs text-gray-400"></p>
-      </div>
-      <p id="progressStats" class="text-[11px] mt-1 text-gray-400"></p>
-    `;
-    btn.parentElement.appendChild(wrap);
-  }
+  const wrap = document.getElementById('progressWrap');
+  if (!wrap) return;
   const msg = wrap.querySelector('#progressMsg');
   if (msg) msg.textContent = message || 'Queued…';
   const inner = wrap.querySelector('#progressInner');
@@ -213,7 +197,7 @@ function showProgress(message) {
   if (pct) pct.textContent = '0%';
   const stats = wrap.querySelector('#progressStats');
   if (stats) stats.textContent = '';
-  wrap.style.display = 'block';
+  wrap.classList.remove('hidden');
 }
 
 /**
@@ -242,21 +226,9 @@ function updateProgress(pct, message, statsText) {
  */
 function hideProgress() {
   const wrap = document.getElementById('progressWrap');
-  if (wrap) wrap.style.display = 'none';
+  if (wrap) wrap.classList.add('hidden');
 }
 
-/**
- * Format seconds into a "M:SS ETA" string.
- *
- * @param {number} s - Seconds remaining.
- * @returns {string} Formatted ETA or empty string if invalid.
- */
-function fmtETA(s) {
-  if (!(s >= 0)) return '';
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${String(sec).padStart(2,'0')} ETA`;
-}
 
 // ---------------------------------------------------------------------------
 // Upload Pipeline
@@ -343,6 +315,7 @@ async function uploadMastDirectory() {
   uploadBtn.textContent = 'Processing...';
   uploadBtn.disabled = true;
   showProgress('Queued…');
+  document.getElementById('progressWrap').scrollIntoView({ behavior: 'smooth', block: 'center' });
 
   try {
     // --- 2. Start the async backend job ---
@@ -359,16 +332,16 @@ async function uploadMastDirectory() {
           const r = await fetch(`/progress/${__currentJobId}`);
           if (!r.ok) { const et = await r.text(); throw new Error(et || 'progress error'); }
           const p = await r.json();
-          const stageMap = { queued:'Queued', scan:'Scanning files', read:'Reading integrations', regrid:'Regridding', interpolate:'Interpolating', finalize:'Finalizing', done:'Done', error:'Error' };
+          const stageMap = { queued:'Queued', scan:'Scanning files', read:'Reading data', regrid:'Regridding wavelengths', interpolate:'Interpolating gaps', finalize:'Finalizing', done:'Done', error:'Error' };
           const stageLabel = stageMap[p.stage] || (p.stage || '');
           const proc = typeof p.processed_integrations === 'number' ? p.processed_integrations : null;
           const tot = typeof p.total_integrations === 'number' ? p.total_integrations : null;
           const baseMsg = p.message || '';
-          let main = stageLabel ?  `${stageLabel} — ${baseMsg}` : baseMsg;
+          const isCacheHit = baseMsg.toLowerCase().includes('cache');
+          let main = isCacheHit ? 'Loaded from cache' : (stageLabel ? `${stageLabel} — ${baseMsg}` : baseMsg);
           let stats = '';
           if (tot && proc != null) stats += `${proc}/${tot} integrations`;
           if (p.throughput && isFinite(p.throughput)) stats += (stats ? ' • ' : '') + `${p.throughput.toFixed(1)}/s`;
-          if (p.eta_seconds != null) stats += (stats ? ' • ' : '') + fmtETA(p.eta_seconds);
           updateProgress(p.percent || 0, main, stats);
           if (p.status === 'done') {
             updateProgress(100, 'Finalizing…', stats);
