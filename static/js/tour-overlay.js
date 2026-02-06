@@ -274,12 +274,19 @@ function scrollToElement(element) {
         return; // already well positioned
     }
 
-    // Calculate document bounds
+    // Calculate document bounds — use visible content height, not full scrollHeight,
+    // to avoid scrolling into empty space when sections are hidden
     const documentHeight = Math.max(
         document.body.scrollHeight,
         document.documentElement.scrollHeight
     );
     const maxScroll = Math.max(0, documentHeight - viewportHeight);
+
+    // Clamp scroll so the bottom of the viewport never extends past visible content.
+    // This prevents scrolling into empty space below the last visible element.
+    const visibleBottom = absoluteElementBottom + bottomMargin;
+    const contentMaxScroll = Math.max(0, visibleBottom - viewportHeight);
+    const effectiveMaxScroll = Math.min(maxScroll, contentMaxScroll);
 
     // For elements near the bottom of the page, use gentle scrolling
     const elementDistanceFromBottom = documentHeight - absoluteElementBottom;
@@ -291,21 +298,21 @@ function scrollToElement(element) {
             absoluteElementTop - topMargin,
             absoluteElementBottom - viewportHeight + bottomMargin
         );
-        targetScroll = Math.max(0, Math.min(targetScroll, maxScroll));
+        targetScroll = Math.max(0, Math.min(targetScroll, effectiveMaxScroll));
     } else if (step && step.position === 'right') {
         // Message box on right — vertically center the element
         const elementCenter = (absoluteElementTop + absoluteElementBottom) / 2;
         targetScroll = elementCenter - (viewportHeight / 2);
-        targetScroll = Math.max(0, Math.min(targetScroll, maxScroll));
+        targetScroll = Math.max(0, Math.min(targetScroll, effectiveMaxScroll));
     } else if (step && step.position === 'left') {
         // Message box on left — vertically center the element
         const elementCenter = (absoluteElementTop + absoluteElementBottom) / 2;
         targetScroll = elementCenter - (viewportHeight / 2);
-        targetScroll = Math.max(0, Math.min(targetScroll, maxScroll));
+        targetScroll = Math.max(0, Math.min(targetScroll, effectiveMaxScroll));
     } else {
         // Default: position element near top with margin
         targetScroll = absoluteElementTop - topMargin;
-        targetScroll = Math.max(0, Math.min(targetScroll, maxScroll));
+        targetScroll = Math.max(0, Math.min(targetScroll, effectiveMaxScroll));
     }
 
     window.scrollTo({
@@ -332,22 +339,15 @@ function highlightElement(element) {
     const highlight = document.getElementById('tourHighlight');
     if (!highlight) return;
 
-    // Clear any existing cutouts first
-    document.querySelectorAll('.tour-overlay-section').forEach(el => el.remove());
+    // Remove previous multi-highlights (single highlight uses #tourHighlight)
+    document.querySelectorAll('.tour-multi-highlight').forEach(el => el.remove());
 
-    // Force a fresh layout calculation — wait one frame
+    // Wait one frame for layout to settle (e.g. after hiding the tour prompt),
+    // then position highlight and overlay together so there's no flash
     requestAnimationFrame(() => {
         const rect = element.getBoundingClientRect();
         const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
         const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-
-        console.log('🎯 Highlighting element:', element.id || element.className);
-        console.log('   Position:', {
-            top: rect.top,
-            left: rect.left,
-            width: rect.width,
-            height: rect.height
-        });
 
         // Position the highlight box around the element (5px padding)
         highlight.style.top = (rect.top + scrollTop - 5) + 'px';
@@ -371,12 +371,11 @@ function highlightElement(element) {
             element.style.zIndex = '10000';
         }
 
-        // Create overlay cutouts for this single highlight
+        // Update overlay cutouts in the same frame — updateOverlayWithCutouts
+        // removes old sections before creating new ones, so no flash
         const selector = step.element;
         if (selector) {
-            requestAnimationFrame(() => {
-                updateOverlayWithCutouts([selector]);
-            });
+            updateOverlayWithCutouts([selector]);
         }
     });
 }

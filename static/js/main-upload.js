@@ -315,7 +315,9 @@ async function uploadMastDirectory() {
   uploadBtn.textContent = 'Processing...';
   uploadBtn.disabled = true;
   showProgress('Queued…');
-  document.getElementById('progressWrap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (!window.tourActive || typeof window.tourActive !== 'function' || !window.tourActive()) {
+    document.getElementById('progressWrap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 
   try {
     // --- 2. Start the async backend job ---
