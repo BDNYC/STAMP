@@ -394,8 +394,16 @@
             </div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/tour.js') }}?v={{ range(1, 10000) | random }}"></script>
+    <!-- Main app: state → plots → spectrum → upload → export (load order matters) -->
+    <script src="{{ url_for('static', filename='js/main-state.js') }}?v={{ range(1, 10000) | random }}"></script>
+    <script src="{{ url_for('static', filename='js/main-plots.js') }}?v={{ range(1, 10000) | random }}"></script>
+    <script src="{{ url_for('static', filename='js/main-spectrum.js') }}?v={{ range(1, 10000) | random }}"></script>
+    <script src="{{ url_for('static', filename='js/main-upload.js') }}?v={{ range(1, 10000) | random }}"></script>
+    <script src="{{ url_for('static', filename='js/main-export.js') }}?v={{ range(1, 10000) | random }}"></script>
+    <!-- Tour system: steps → overlay → core (load order matters) -->
+    <script src="{{ url_for('static', filename='js/tour-steps.js') }}?v={{ range(1, 10000) | random }}"></script>
+    <script src="{{ url_for('static', filename='js/tour-overlay.js') }}?v={{ range(1, 10000) | random }}"></script>
+    <script src="{{ url_for('static', filename='js/tour-core.js') }}?v={{ range(1, 10000) | random }}"></script>
 
 </body>
 </html>
