@@ -1,11 +1,4 @@
-"""
-routes/upload.py
-File upload and download routes.
-
-- ``/upload_mast``            Synchronous MAST zip processing.
-- ``/upload_spectrum_frames`` Receives PNG frames and encodes an MP4 via ffmpeg.
-- ``/download_plots``         Packages the most recent plots into a ZIP file.
-"""
+"""File upload and download routes for MAST data, spectrum frames, and plot exports."""
 
 import io
 import os
@@ -37,10 +30,6 @@ logger = logging.getLogger(__name__)
 upload_bp = Blueprint('upload', __name__)
 
 
-# ---------------------------------------------------------------------------
-# /download_plots
-# ---------------------------------------------------------------------------
-
 @upload_bp.route('/download_plots')
 def download_plots():
     """Package the latest surface plot, heatmap, and video into a ZIP file.
@@ -59,7 +48,7 @@ def download_plots():
     if not surface_html or not heatmap_html:
         return 'No plots available to download.', 400
 
-    # --- Resolve video path ------------------------------------------------
+    # Resolve video path
     mp4_path = state.latest_spectrum_mp4_path
     mp4_bytes = None
     mp4_name = None
@@ -80,7 +69,7 @@ def download_plots():
             '</video>'
         )
 
-    # --- Helper: build a standalone HTML page for a single plot ------------
+    # Build a standalone HTML page for a single plot
     def make_single_plot_html(fig_json, title, bands_list):
         d = json.dumps(fig_json["data"], cls=PlotlyJSONEncoder)
         l = json.dumps(fig_json.get("layout", {}), cls=PlotlyJSONEncoder)
@@ -122,7 +111,7 @@ def download_plots():
             "</script></body></html>"
         )
 
-    # --- Build combined HTML with both plots + video -----------------------
+    # Build combined HTML with both plots + video
     if surface_json and heatmap_json:
         s_data = json.dumps(surface_json["data"], cls=PlotlyJSONEncoder)
         s_layout = json.dumps(surface_json.get("layout", {}), cls=PlotlyJSONEncoder)
@@ -181,7 +170,7 @@ def download_plots():
             "</body></html>"
         )
 
-    # --- Write ZIP to memory buffer and send -------------------------------
+    # Write ZIP to memory buffer and send
     ts = time.strftime('%Y%m%d_%H%M%S')
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
@@ -206,10 +195,6 @@ def download_plots():
         download_name='jwst_plots_' + ts + '.zip',
     )
 
-
-# ---------------------------------------------------------------------------
-# /upload_spectrum_frames
-# ---------------------------------------------------------------------------
 
 @upload_bp.route('/upload_spectrum_frames', methods=['POST'])
 def upload_spectrum_frames():
@@ -276,10 +261,6 @@ def upload_spectrum_frames():
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-# ---------------------------------------------------------------------------
-# /upload_mast  (synchronous upload — kept for backward compatibility)
-# ---------------------------------------------------------------------------
-
 @upload_bp.route('/upload_mast', methods=['POST'])
 def upload_mast():
     """Process an uploaded MAST zip file synchronously and return plots.
@@ -292,7 +273,7 @@ def upload_mast():
         if not mast_file or mast_file.filename == '':
             return jsonify({'error': 'No MAST zip file provided.'}), 400
 
-        # --- Parse form parameters -----------------------------------------
+        # Parse form parameters
         custom_bands_json = request.form.get('custom_bands', '[]')
         try:
             custom_bands = json.loads(custom_bands_json)
@@ -327,7 +308,7 @@ def upload_mast():
             v_max = float(variability_range_max) if variability_range_max else None
             variability_range = (v_min, v_max)
 
-        # --- Extract and sort files ----------------------------------------
+        # Extract and sort files
         temp_dir = tempfile.mkdtemp()
         try:
             zip_path = os.path.join(temp_dir, 'mast.zip')
@@ -362,7 +343,7 @@ def upload_mast():
             shutil.rmtree(temp_dir)
             return jsonify({'error': 'Error sorting files by observation time.'}), 400
 
-        # --- Run processing pipeline ---------------------------------------
+        # Run processing pipeline
         wavelength_1d, flux_norm_2d, flux_raw_2d, time_1d, metadata, error_raw_2d = (
             process_mast_files_with_gaps(
                 fits_files_sorted,
@@ -371,7 +352,7 @@ def upload_mast():
             )
         )
 
-        # --- Apply user-specified data ranges ------------------------------
+        # Apply user-specified data ranges
         range_info = []
         if wavelength_range or time_range:
             wavelength_1d_norm, flux_norm_2d_filtered, time_1d_norm, range_info = apply_data_ranges(
@@ -403,7 +384,7 @@ def upload_mast():
 
         ref_spec = np.nanmedian(np.asarray(flux_raw_2d_filtered), axis=1)
 
-        # --- Create plots --------------------------------------------------
+        # Create plots
         surface_plot = create_surface_plot_with_visits(
             z_data,
             wavelength_1d_norm if z_axis_display != 'flux' else wavelength_1d_raw,

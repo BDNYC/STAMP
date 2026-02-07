@@ -1,15 +1,5 @@
 """
-plotting.py
 Plotly figure builders for JWST spectral visualisations.
-
-Both functions take processed numpy arrays and visualisation parameters,
-returning ``plotly.graph_objs.Figure`` objects ready for JSON serialisation
-and interactive display.
-
-Public functions
-----------------
-create_surface_plot_with_visits   Build a 3-D surface figure.
-create_heatmap_plot               Build a 2-D heatmap figure.
 """
 
 import logging
@@ -22,78 +12,18 @@ from processing import process_data, identify_visits
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# 3-D surface plot
-# ---------------------------------------------------------------------------
-
 def create_surface_plot_with_visits(flux, wavelength, time, title, num_plots,
                                     smooth_sigma=2, wavelength_unit='um',
                                     custom_bands=None, colorscale='Viridis',
                                     gap_threshold=0.5, use_interpolation=False,
                                     z_range=None, z_axis_display='variability',
                                     flux_unit='Unknown', errors_2d=None):
-    """Create an interactive 3-D Plotly surface plot.
-
-    When ``use_interpolation`` is False the time series is segmented into
-    separate *visits* (gaps > ``gap_threshold`` hours) so each visit is
-    rendered as its own surface trace — this prevents interpolation artefacts
-    across large time gaps.
-
-    Parameters
-    ----------
-    flux : np.ndarray
-        2-D flux array, shape ``(n_wavelength, n_time)``.
-    wavelength : np.ndarray
-        1-D wavelength array (microns).
-    time : np.ndarray
-        1-D time array (hours).
-    title : str
-        Plot title text.
-    num_plots : int
-        Target number of time bins passed to :func:`process_data`.
-    smooth_sigma : float
-        Gaussian smoothing kernel width.
-    wavelength_unit : str
-        ``'um'``, ``'nm'``, or ``'A'``.
-    custom_bands : list of dict, optional
-        User-defined wavelength bands (not rendered here, passed for
-        front-end use).
-    colorscale : str
-        Plotly colorscale name.
-    gap_threshold : float
-        Hours gap that starts a new visit.
-    use_interpolation : bool
-        If True, treat the entire time series as a single visit.
-    z_range : tuple, list, float, or None
-        Clipping range for the Z axis (see notes below).
-    z_axis_display : str
-        ``'variability'`` or ``'flux'``.
-    flux_unit : str
-        Unit label for the flux axis.
-    errors_2d : np.ndarray or None
-        Error array attached as ``customdata`` on each surface trace.
-
-    Returns
-    -------
-    plotly.graph_objs.Figure
-
-    Notes
-    -----
-    **Z-range clipping logic:**
-
-    * *tuple / list* — In variability mode the lower bound defaults to
-      ``-z_range[1]`` (symmetric) when ``z_range[0]`` is None.  In flux
-      mode both bounds are taken as-is.
-    * *scalar* — Variability mode clips to ``[-z_range, +z_range]``.  Flux
-      mode ignores the scalar and uses the data range.
-    * *None* — No clipping; the full data range is used.
-    """
+    """Create an interactive 3-D Plotly surface plot, one trace per visit."""
     x, y, X, Y, Z, wavelength_label = process_data(
         flux, wavelength, time, num_plots, False,
         smooth_sigma, wavelength_unit, z_axis_display,
     )
 
-    # --- Z-axis labels and hover formatting --------------------------------
     if z_axis_display == 'flux':
         Z_adjusted = Z
         colorbar_title = f'Flux ({flux_unit})'
@@ -114,9 +44,7 @@ def create_surface_plot_with_visits(flux, wavelength, time, title, num_plots,
         hover_z_suffix = ' %'
         colorbar_tickformat = None
 
-    # --- Z-range clipping --------------------------------------------------
-    # Variability mode uses symmetric range by default; flux mode uses
-    # absolute min/max when not specified.
+    # Z-range clipping
     if isinstance(z_range, (tuple, list)):
         if z_axis_display == 'variability':
             z_min_range = -z_range[1] if z_range[0] is None else z_range[0]
@@ -142,7 +70,7 @@ def create_surface_plot_with_visits(flux, wavelength, time, title, num_plots,
         z_min = Z_adjusted.min()
         z_max = Z_adjusted.max()
 
-    # --- Build one surface trace per visit ---------------------------------
+    # One surface trace per visit
     if use_interpolation:
         visits = [(0, len(x))]
     else:
@@ -213,50 +141,12 @@ def create_surface_plot_with_visits(flux, wavelength, time, title, num_plots,
     return fig
 
 
-# ---------------------------------------------------------------------------
-# 2-D heatmap plot
-# ---------------------------------------------------------------------------
-
 def create_heatmap_plot(flux, wavelength, time, title, num_plots,
                         smooth_sigma=2, wavelength_unit='um',
                         custom_bands=None, colorscale='Viridis',
                         z_range=None, z_axis_display='variability',
                         flux_unit='Unknown', errors_2d=None):
-    """Create an interactive 2-D Plotly heatmap.
-
-    Parameters
-    ----------
-    flux : np.ndarray
-        2-D flux array, shape ``(n_wavelength, n_time)``.
-    wavelength : np.ndarray
-        1-D wavelength array (microns).
-    time : np.ndarray
-        1-D time array (hours).
-    title : str
-        Plot title.
-    num_plots : int
-        Target time-bin count.
-    smooth_sigma : float
-        Gaussian smoothing kernel width.
-    wavelength_unit : str
-        ``'um'``, ``'nm'``, or ``'A'``.
-    custom_bands : list of dict, optional
-        Wavelength bands for the front-end.
-    colorscale : str
-        Plotly colorscale name.
-    z_range : tuple, list, float, or None
-        Z-axis clipping (same logic as :func:`create_surface_plot_with_visits`).
-    z_axis_display : str
-        ``'variability'`` or ``'flux'``.
-    flux_unit : str
-        Unit label for the colour axis.
-    errors_2d : np.ndarray or None
-        Error array attached as ``customdata``.
-
-    Returns
-    -------
-    plotly.graph_objs.Figure
-    """
+    """Create an interactive 2-D Plotly heatmap."""
     x, y, X, Y, Z, wavelength_label = process_data(
         flux, wavelength, time, num_plots, False,
         smooth_sigma, wavelength_unit, z_axis_display,
@@ -268,7 +158,6 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots,
             f"(len(y), len(x)) = {(len(y), len(x))}"
         )
 
-    # --- Z-axis labels and hover formatting --------------------------------
     if z_axis_display == 'flux':
         Z_adjusted = Z
         colorbar_title = f'Flux ({flux_unit})'
@@ -289,7 +178,6 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots,
         hover_z_suffix = ' %'
         colorbar_tickformat = None
 
-    # --- Z-range clipping (same three-case logic as surface plot) ----------
     if isinstance(z_range, (tuple, list)):
         if z_axis_display == 'variability':
             z_min_range = -z_range[1] if z_range[0] is None else z_range[0]

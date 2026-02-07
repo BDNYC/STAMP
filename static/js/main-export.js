@@ -1,35 +1,11 @@
-/*
- * ============================================================================
- * main-export.js — Video Export & Demo Data Initialization
- * ============================================================================
- *
- * Video pipeline: captures spectrum animation frames as PNGs, uploads them
- * to the server for FFmpeg encoding, then triggers the ZIP download.
- *
- * Also contains the demo data initialization (selecting the built-in demo
- * dataset vs. user-uploaded files) and file display management.
- *
- * Requires:
- *   main-state.js    (VIDEO_* constants, spectrum state variables)
- *   main-plots.js    (getEligibleWavelengthIndices)
- *   main-spectrum.js (ensureSpectrumInitialized, updateSpectrumPlot,
- *                     nextAnimationFrame)
- *
- * Load order:
- *   main-state.js → main-plots.js → main-spectrum.js
- *                → main-upload.js → main-export.js
- * ============================================================================
- */
+// main-export.js - Video Export & Demo Data Initialization
 
-// ---------------------------------------------------------------------------
 // Video Frame Capture & Encoding
-// ---------------------------------------------------------------------------
 
 /**
  * Convert a base64 data URL to a Blob object.
- *
  * @param {string} dataurl - The data URL (e.g. from Plotly.toImage).
- * @returns {Blob} Binary blob of the image data.
+ * @returns {Blob}
  */
 function dataURLtoBlob(dataurl) {
   const arr = dataurl.split(',');
@@ -43,11 +19,7 @@ function dataURLtoBlob(dataurl) {
 
 /**
  * Capture PNG frames of the spectrum plot at each time or wavelength point.
- *
- * Respects VIDEO_MAX_FRAMES by evenly sampling indices if the total exceeds
- * the limit. In vs_time mode with active bands, only captures eligible
- * (in-band) wavelength indices.
- *
+ * Respects VIDEO_MAX_FRAMES by evenly sampling if total exceeds the limit.
  * @returns {Promise<Blob[]>} Array of PNG image blobs, one per frame.
  * @throws {Error} If no time/wavelength points are available.
  */
@@ -56,7 +28,6 @@ async function captureSpectrumFrames() {
   const spDiv = document.getElementById('spectrumPlot');
 
   if (spectrumMode === 'vs_wavelength') {
-    // Capture one frame per time point
     const N = totalTimePoints;
     if (!N || N <= 0) throw new Error('No spectrum time points available.');
     const target = Math.min(N, VIDEO_MAX_FRAMES);
@@ -75,7 +46,6 @@ async function captureSpectrumFrames() {
     }
     return frames;
   } else {
-    // Capture one frame per wavelength point (filtered to eligible bands)
     const N = totalWavelengthPoints;
     if (!N || N <= 0) throw new Error('No spectrum wavelength points available.');
     const eligible = getEligibleWavelengthIndices(currentSpectrumData.wavelengthData || []);
@@ -100,11 +70,6 @@ async function captureSpectrumFrames() {
 
 /**
  * Upload captured PNG frames to the server for FFmpeg video encoding.
- *
- * POSTs a FormData with all frames, fps, and crf settings to
- * /upload_spectrum_frames. On success, stores the returned video token
- * in window.__lastVideoToken.
- *
  * @param {Blob[]} frames - Array of PNG blobs from captureSpectrumFrames.
  * @returns {Promise<void>}
  * @throws {Error} If the upload or encoding fails.
@@ -128,13 +93,7 @@ async function uploadFramesAndEncode(frames) {
 }
 
 /**
- * Orchestrate the full download flow: capture spectrum frames, upload
- * them for video encoding, then download the ZIP containing plots and
- * the generated video.
- *
- * Handles the ffmpeg-not-available case gracefully by showing a
- * user-friendly alert instead of a raw error.
- *
+ * Orchestrate the full download flow: capture frames, encode video, download ZIP.
  * @param {Event} e - The click event from the download link.
  * @returns {Promise<void>}
  */
@@ -142,10 +101,9 @@ async function downloadAllWithVideo(e) {
   if (e) e.preventDefault();
   const link = document.querySelector('a[href="/download_plots"]');
   const originalText = link ? link.textContent : null;
-  if (link) { link.textContent = 'Preparing video…'; link.classList.add('opacity-70'); }
+  if (link) { link.textContent = 'Preparing video...'; link.classList.add('opacity-70'); }
 
   try {
-    // Capture frames and encode video
     const frames = await captureSpectrumFrames();
     await uploadFramesAndEncode(frames);
 
@@ -184,24 +142,20 @@ async function downloadAllWithVideo(e) {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Demo Data Initialization
-// ---------------------------------------------------------------------------
 
 /**
- * Set the demo dataset as the initially selected data source and update
- * the file display.
+ * Set the demo dataset as the initially selected data source.
  */
 function initializeDemoData() {
   window.isDemoDataSelected = true;
   window.selectedFile = null;
   updateFileDisplay();
-  console.log('Demo dataset initialized:  demo_jwst_timeseries.zip');
+  console.log('Demo dataset initialized: demo_jwst_timeseries.zip');
 }
 
 /**
- * Update the file display UI to reflect the current selection state:
- * demo dataset, user-uploaded file, or no file.
+ * Update the file display UI to reflect the current selection state.
  */
 function updateFileDisplay() {
   const fileNameEl = document.getElementById('fileName');
@@ -213,29 +167,24 @@ function updateFileDisplay() {
   }
 
   if (window.isDemoDataSelected) {
-    fileNameEl.innerHTML = '📁 demo_jwst_timeseries.zip <span class="text-xs text-blue-400 ml-2">(Demo Dataset)</span>';
+    fileNameEl.innerHTML = 'demo_jwst_timeseries.zip <span class="text-xs text-blue-400 ml-2">(Demo Dataset)</span>';
     fileDisplayEl.classList.add('border-blue-500', 'bg-blue-900/20');
     fileDisplayEl.classList.remove('border-gray-600');
   } else if (window.selectedFile) {
-    fileNameEl.innerHTML = `📁 ${window.selectedFile.name}`;
+    fileNameEl.innerHTML = `${window.selectedFile.name}`;
     fileDisplayEl.classList.remove('border-blue-500', 'bg-blue-900/20');
     fileDisplayEl.classList.add('border-gray-600');
   } else {
-    fileNameEl.innerHTML = '📁 No file selected';
+    fileNameEl.innerHTML = 'No file selected';
     fileDisplayEl.classList.remove('border-blue-500', 'bg-blue-900/20');
     fileDisplayEl.classList.add('border-gray-600');
   }
 }
 
 /**
- * Attach event listeners for all file-selection UI elements:
- *   - "Choose your own file" button → opens file dialog
- *   - Hidden file input → stores selected file
- *   - File display area → opens file dialog on click
- *   - "Use Demo" button → reverts to demo dataset
+ * Attach event listeners for file-selection UI elements.
  */
 function setupDemoDataHandlers() {
-  // "Choose your own file" button
   const changeFileBtn = document.getElementById('changeFileBtn');
   if (changeFileBtn) {
     changeFileBtn.addEventListener('click', () => {
@@ -246,7 +195,6 @@ function setupDemoDataHandlers() {
     });
   }
 
-  // Hidden file input
   const mastFileInput = document.getElementById('mastZipFile');
   if (mastFileInput) {
     mastFileInput.addEventListener('change', (e) => {
@@ -259,7 +207,6 @@ function setupDemoDataHandlers() {
     });
   }
 
-  // File display area click
   const fileDisplay = document.getElementById('fileDisplay');
   if (fileDisplay) {
     fileDisplay.addEventListener('click', () => {
@@ -270,7 +217,6 @@ function setupDemoDataHandlers() {
     });
   }
 
-  // "Use Demo" button
   const useDemoBtn = document.getElementById('useDemoBtn');
   if (useDemoBtn) {
     useDemoBtn.addEventListener('click', () => {

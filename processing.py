@@ -1,20 +1,5 @@
 """
-processing.py
 Numerical processing pipeline for JWST spectral time-series data.
-
-Covers the full path from raw per-integration spectra to plot-ready 2-D
-arrays: file scanning, integration loading, wavelength regridding, optional
-time interpolation, variability normalisation, binning, and smoothing.
-
-Public functions
-----------------
-calculate_bin_size                Compute binning factor.
-bin_flux_arr                      Median-bin a 2-D flux array along the time axis.
-smooth_flux                       Gaussian-smooth a flux array.
-process_data                      Master array processor used by plotting functions.
-identify_visits                   Segment a time series into observation visits.
-calculate_variability_from_raw_flux   Normalise flux to get percent variability.
-process_mast_files_with_gaps      Main pipeline orchestrator.
 """
 
 import os
@@ -38,36 +23,13 @@ from data_io import (
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Small helpers
-# ---------------------------------------------------------------------------
-
 def calculate_bin_size(data_length, num_plots):
-    """Return the integer binning factor so that *data_length* is reduced
-    to approximately *num_plots* time bins.
-    """
+    """Return the binning factor to reduce data_length to ~num_plots bins."""
     return max(1, data_length // num_plots)
 
 
 def bin_flux_arr(fluxarr, bin_size):
-    """Median-bin a 2-D flux array along the time (column) axis.
-
-    Each row of *fluxarr* (one wavelength channel) is independently binned
-    using ``scipy.stats.binned_statistic`` with equal-width bins.  Rows are
-    processed in parallel using a thread pool.
-
-    Parameters
-    ----------
-    fluxarr : np.ndarray
-        Shape ``(n_wavelength, n_time)``.
-    bin_size : int
-        Desired number of raw time steps per bin.
-
-    Returns
-    -------
-    np.ndarray
-        Binned array with shape ``(n_wavelength, n_bins)``.
-    """
+    """Median-bin a 2-D flux array along the time axis using a thread pool."""
     try:
         n_bins = fluxarr.shape[1] // bin_size
         bin_edges = np.linspace(0, fluxarr.shape[1], n_bins + 1)
@@ -86,20 +48,7 @@ def bin_flux_arr(fluxarr, bin_size):
 
 
 def smooth_flux(flux, sigma=2):
-    """Apply a Gaussian filter to a flux array.
-
-    Parameters
-    ----------
-    flux : np.ndarray
-        2-D flux array.
-    sigma : float
-        Standard deviation of the Gaussian kernel (pixels).
-
-    Returns
-    -------
-    np.ndarray
-        Smoothed array with the same shape.
-    """
+    """Apply a Gaussian filter to a flux array."""
     try:
         return gaussian_filter(flux, sigma=sigma)
     except Exception as e:
@@ -107,69 +56,25 @@ def smooth_flux(flux, sigma=2):
         raise
 
 
-# ---------------------------------------------------------------------------
-# Core data processing
-# ---------------------------------------------------------------------------
-
 def process_data(flux, wavelength, time, num_plots, apply_binning=True,
                  smooth_sigma=2, wavelength_unit='um',
                  z_axis_display='variability'):
-    """Prepare raw arrays for Plotly plotting.
-
-    Steps performed:
-    1. Align wavelength and flux dimensions.
-    2. Remove non-finite wavelength rows.
-    3. Sort wavelengths to be strictly increasing.
-    4. Optionally bin along the time axis.
-    5. Gaussian-smooth the flux.
-    6. Convert wavelength units if needed.
-    7. Build meshgrid and compute Z values (variability % or raw flux).
-
-    Parameters
-    ----------
-    flux : np.ndarray
-        2-D array, shape ``(n_wavelength, n_time)``.
-    wavelength : np.ndarray
-        1-D wavelength array (microns).
-    time : np.ndarray
-        1-D time array (hours).
-    num_plots : int
-        Target number of time bins (used by :func:`calculate_bin_size`).
-    apply_binning : bool
-        Whether to apply time-axis binning.
-    smooth_sigma : float
-        Gaussian kernel width.
-    wavelength_unit : str
-        ``'um'``, ``'nm'``, or ``'A'`` (Angstrom).
-    z_axis_display : str
-        ``'variability'`` for percent deviation from median, or ``'flux'``
-        for raw flux values.
-
-    Returns
-    -------
-    tuple
-        ``(x, y, X, Y, Z, wavelength_label)`` where *x* is the time axis,
-        *y* is the wavelength axis, *X* / *Y* are meshgrids, *Z* is the
-        value surface, and *wavelength_label* is a display string.
-    """
+    """Prepare raw arrays for Plotly plotting: align, clean, bin, smooth, meshgrid."""
     try:
         logger.info('Shape before processing: %s', flux.shape)
         logger.info(f'Time array shape: {time.shape if hasattr(time, "shape") else len(time)}')
         logger.info(f'Z-axis display mode: {z_axis_display}')
 
-        # Align wavelength and flux dimensions
         min_length = min(flux.shape[0], len(wavelength))
         flux = flux[:min_length]
         wavelength = np.asarray(wavelength[:min_length], dtype=float)
 
-        # Remove non-finite wavelength rows
         finite_mask = np.isfinite(wavelength)
         if not np.all(finite_mask):
             logger.info(f"Removing {np.count_nonzero(~finite_mask)} non-finite wavelength rows")
         wavelength = wavelength[finite_mask]
         flux = flux[finite_mask, :]
 
-        # Sort wavelengths to be strictly increasing
         sort_idx = np.argsort(wavelength)
         if not np.all(sort_idx == np.arange(len(sort_idx))):
             logger.info("Sorting wavelengths to be strictly increasing")
@@ -181,7 +86,6 @@ def process_data(flux, wavelength, time, num_plots, apply_binning=True,
         else:
             time = time.astype(float)
 
-        # Binning
         bin_size = calculate_bin_size(flux.shape[1], num_plots)
         logger.info(f'Calculated bin size: {bin_size}')
         if bin_size > 1 and apply_binning:
@@ -189,26 +93,23 @@ def process_data(flux, wavelength, time, num_plots, apply_binning=True,
             time = time[::bin_size]
             logger.info('Shape after binning: %s', flux.shape)
 
-        # Smoothing
         flux = smooth_flux(flux, sigma=smooth_sigma)
         logger.info('Shape after smoothing: %s', flux.shape)
 
-        # Wavelength unit conversion
         if wavelength_unit == 'nm':
             wavelength = wavelength / 1000.0
             wavelength_label = 'Wavelength (nm)'
         elif wavelength_unit == 'A':
             wavelength = wavelength / 10000.0
-            wavelength_label = 'Wavelength (Å)'
+            wavelength_label = 'Wavelength (A)'
         else:
-            wavelength_label = 'Wavelength (µm)'
+            wavelength_label = 'Wavelength (um)'
 
         x = time
         logger.info(f'Time array after processing: min={np.nanmin(x):.4f}, max={np.nanmax(x):.4f}, shape={x.shape}')
         y = wavelength
         X, Y = np.meshgrid(x, y)
 
-        # Z values: raw flux or percent variability
         if z_axis_display == 'flux':
             Z = flux
             logger.info(f'Raw flux range: {np.nanmin(Z):.4e} to {np.nanmax(Z):.4e}')
@@ -222,27 +123,9 @@ def process_data(flux, wavelength, time, num_plots, apply_binning=True,
         raise
 
 
-# ---------------------------------------------------------------------------
-# Visit identification
-# ---------------------------------------------------------------------------
-
 def identify_visits(times_hours, gap_threshold=0.5):
-    """Segment a time series into separate observation visits.
-
-    A new visit starts whenever the gap between consecutive observations
-    exceeds *gap_threshold* hours.
-
-    Parameters
-    ----------
-    times_hours : np.ndarray
-        1-D array of observation times (hours).
-    gap_threshold : float
-        Minimum gap (hours) that starts a new visit.
-
-    Returns
-    -------
-    list of (int, int)
-        ``(start_idx, end_idx)`` pairs for each visit (end is exclusive).
+    """Segment a time series into visits (gaps > gap_threshold hours).
+    Returns list of (start_idx, end_idx) pairs.
     """
     if len(times_hours) == 0:
         return []
@@ -267,27 +150,8 @@ def identify_visits(times_hours, gap_threshold=0.5):
     return visits
 
 
-# ---------------------------------------------------------------------------
-# Variability calculation
-# ---------------------------------------------------------------------------
-
 def calculate_variability_from_raw_flux(flux_raw_2d):
-    """Normalise raw flux per wavelength to create a variability array.
-
-    Each wavelength channel is divided by its median flux across time,
-    producing an array centred around 1.0.  The plotting layer later
-    converts this to percent deviation ``(norm - 1) * 100``.
-
-    Parameters
-    ----------
-    flux_raw_2d : np.ndarray
-        Shape ``(n_wavelength, n_time)``.
-
-    Returns
-    -------
-    np.ndarray
-        Normalised flux array with the same shape.
-    """
+    """Normalise raw flux per wavelength channel by its median (centered around 1.0)."""
     median_flux_per_wavelength = np.nanmedian(flux_raw_2d, axis=1, keepdims=True)
     median_flux_per_wavelength[median_flux_per_wavelength == 0] = 1.0
     flux_norm_2d = flux_raw_2d / median_flux_per_wavelength
@@ -296,49 +160,15 @@ def calculate_variability_from_raw_flux(flux_raw_2d):
     return flux_norm_2d
 
 
-# ---------------------------------------------------------------------------
-# Main pipeline orchestrator
-# ---------------------------------------------------------------------------
-
 def process_mast_files_with_gaps(file_paths, use_interpolation=False,
                                  max_integrations=None, progress_cb=None):
-    """Run the full data-processing pipeline on a set of FITS/H5 files.
-
-    Pipeline stages
-    ---------------
-    1. **Scan** — open each file just enough to count integrations and
-       read the first timestamp, then sort files chronologically.
-    2. **Read** — load every integration from every file using the
-       appropriate reader (FITS or HDF5).
-    3. **Regrid** — interpolate all integrations onto a common 1000-point
-       wavelength grid.
-    4. **Interpolate** *(optional)* — if ``use_interpolation`` is True,
-       interpolate flux across time to fill gaps between visits.
-    5. **Normalise** — divide by the per-wavelength median to produce the
-       normalised (variability) flux array.
-
-    Parameters
-    ----------
-    file_paths : list of str
-        Paths to FITS/H5 files.
-    use_interpolation : bool
-        Whether to linearly interpolate across time gaps.
-    max_integrations : int or None
-        If set, sub-sample down to this many integrations.
-    progress_cb : callable, optional
-        ``callback(percent, message, **kwargs)`` for progress reporting.
-
-    Returns
-    -------
-    tuple
-        ``(common_wl, flux_norm_2d, flux_raw_2d, times_hours, metadata,
-        error_raw_2d)``
+    """Run the full processing pipeline on FITS/H5 files.
+    Stages: scan, read, regrid, (optional) interpolate, normalise.
+    Returns (common_wl, flux_norm_2d, flux_raw_2d, times_hours, metadata, error_raw_2d).
     """
-    # ------------------------------------------------------------------
-    # Stage 1: Scan — count integrations and determine file order
-    # ------------------------------------------------------------------
+    # Stage 1: Scan files
     if progress_cb:
-        progress_cb(2.0, "Scanning files…", stage="scan")
+        progress_cb(2.0, "Scanning files...", stage="scan")
 
     scans = []
     for fp in file_paths or []:
@@ -363,14 +193,13 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
             logger.warning(f"Error scanning {os.path.basename(fp)}: {e}")
             scans.append({"path": fp, "count": 0, "first_t": None})
 
-    # Drop files with zero integrations, then sort chronologically
     scans = [s for s in scans if s["count"] > 0]
     scans.sort(key=lambda d: (float('inf') if d["first_t"] is None else d["first_t"]))
 
     total_files = len(scans)
     total_est_integrations = sum(s["count"] for s in scans) if scans else 0
 
-    logger.info(f"📁 Scanned files: {total_files} valid files, {total_est_integrations} total integrations")
+    logger.info(f"Scanned files: {total_files} valid files, {total_est_integrations} total integrations")
 
     if progress_cb:
         progress_cb(
@@ -381,16 +210,13 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
             total_integrations=total_est_integrations,
         )
 
-    # ------------------------------------------------------------------
-    # Stage 2: Read — load integrations from each file
-    # ------------------------------------------------------------------
+    # Stage 2: Read integrations from each file
     all_integrations = []
     all_headers = []
     processed_count = 0
     read_start, read_end = 10.0, 60.0
 
     def pct_for_read(processed):
-        """Map processed-integration count to a percentage in [10%, 60%]."""
         if total_est_integrations == 0:
             return read_start
         frac = processed / total_est_integrations
@@ -400,7 +226,7 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
         fp = s["path"]
         file_total = s["count"]
 
-        logger.info(f"📄 Processing file {i + 1}/{total_files}: {os.path.basename(fp)}")
+        logger.info(f"Processing file {i + 1}/{total_files}: {os.path.basename(fp)}")
         logger.info(f"   Expected integrations: {file_total}")
 
         def per_integ_cb(done_local, total_local):
@@ -409,7 +235,7 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
             if progress_cb:
                 progress_cb(
                     pct_for_read(processed_count),
-                    f"Reading {i + 1}/{total_files} • {done_local}/{file_total} integrations",
+                    f"Reading {i + 1}/{total_files} - {done_local}/{file_total} integrations",
                     stage="read",
                     processed_integrations=processed_count,
                     total_integrations=total_est_integrations,
@@ -436,15 +262,15 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
                 f"header_info={'OK' if header_info else 'None'}"
             )
         else:
-            logger.warning(f"   ⚠️ Skipping unknown file type")
+            logger.warning(f"   Skipping unknown file type")
             integrations, header_info = (None, None)
 
         if integrations:
-            logger.info(f"   ✅ Adding {len(integrations)} integrations to all_integrations")
+            logger.info(f"   Adding {len(integrations)} integrations")
             all_integrations.extend(integrations)
             all_headers.append(header_info)
         else:
-            logger.error(f"   ❌ No integrations returned from this file!")
+            logger.error(f"   No integrations returned from this file!")
 
         if progress_cb:
             progress_cb(
@@ -455,21 +281,17 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
                 total_integrations=total_est_integrations,
             )
 
-    logger.info(f"📊 Total integrations collected: {len(all_integrations)}")
+    logger.info(f"Total integrations collected: {len(all_integrations)}")
 
     if not all_integrations:
         raise ValueError("No valid integrations found in files")
 
-    # Sort all integrations chronologically
     all_integrations.sort(
         key=lambda x: x['time'] if not hasattr(x['time'], 'mjd') else x['time'].mjd
     )
     original_count = len(all_integrations)
 
-    # ------------------------------------------------------------------
-    # Stage 3: Regrid — interpolate to a common wavelength grid
-    # ------------------------------------------------------------------
-    # Determine the common wavelength range (intersection of all files)
+    # Stage 3: Regrid to common wavelength grid
     min_wl = max(np.min(integ['wavelength']) for integ in all_integrations)
     max_wl = min(np.max(integ['wavelength']) for integ in all_integrations)
     n_wave = 1000
@@ -482,7 +304,6 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
     regrid_start, regrid_end = 60.0, 88.0
 
     def pct_for_regrid(done):
-        """Map regridded-integration count to a percentage in [60%, 88%]."""
         if total_integ == 0:
             return regrid_start
         frac = done / total_integ
@@ -490,7 +311,7 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
 
     if progress_cb:
         progress_cb(
-            regrid_start, "Regridding integrations…", stage="regrid",
+            regrid_start, "Regridding integrations...", stage="regrid",
             processed_integrations=processed_count,
             total_integrations=total_est_integrations,
         )
@@ -498,7 +319,6 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
     t_start = _time.time()
 
     for k, integ in enumerate(all_integrations):
-        # Interpolate flux onto the common wavelength grid
         f_interp = interpolate.interp1d(
             integ['wavelength'],
             integ['flux'],
@@ -508,7 +328,6 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
         )
         flux_raw_list.append(f_interp(common_wl))
 
-        # Interpolate errors similarly
         if 'error' in integ and integ['error'] is not None:
             e_interp = interpolate.interp1d(
                 integ['wavelength'],
@@ -537,19 +356,16 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
                 throughput=(tp if tp is not None else None),
             )
 
-    # Assemble 2-D arrays: rows = wavelength, columns = time
     flux_raw_2d = np.array(flux_raw_list).T
     error_raw_2d = np.array(error_raw_list).T
     times_arr = np.array(times)
     t0 = times_arr.min()
-    times_hours = (times_arr - t0) * 24.0  # convert MJD delta to hours
+    times_hours = (times_arr - t0) * 24.0
 
-    # ------------------------------------------------------------------
     # Stage 4 (optional): Interpolate across time gaps
-    # ------------------------------------------------------------------
     if use_interpolation:
         if progress_cb:
-            progress_cb(88.0, "Interpolating across time…", stage="interpolate")
+            progress_cb(88.0, "Interpolating across time...", stage="interpolate")
 
         time_grid = np.linspace(times_hours.min(), times_hours.max(), len(times_hours))
         flux_raw_interpolated = np.zeros((flux_raw_2d.shape[0], len(time_grid)))
@@ -570,7 +386,7 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
             if progress_cb and i % 50 == 0:
                 progress_cb(
                     88.0 + 4.0 * (i / max(1, flux_raw_2d.shape[0])),
-                    "Interpolating across time…",
+                    "Interpolating across time...",
                     stage="interpolate",
                 )
 
@@ -578,12 +394,10 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
         error_raw_2d = error_raw_interpolated
         times_hours = time_grid
 
-    # ------------------------------------------------------------------
-    # Stage 5: Normalise — compute variability and assemble metadata
-    # ------------------------------------------------------------------
+    # Stage 5: Normalise and assemble metadata
     if progress_cb:
         progress_cb(
-            92.0, "Computing variability & metadata…", stage="finalize",
+            92.0, "Computing variability & metadata...", stage="finalize",
             processed_integrations=processed_count + total_integ,
             total_integrations=total_est_integrations,
         )
@@ -594,8 +408,8 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
         'total_integrations': original_count,
         'plotted_integrations': original_count,
         'files_processed': len(file_paths),
-        'wavelength_range': f"{common_wl.min():.3f}–{common_wl.max():.3f} µm",
-        'time_range': f"{times_hours.min():.2f}–{times_hours.max():.2f} hours",
+        'wavelength_range': f"{common_wl.min():.3f}-{common_wl.max():.3f} um",
+        'time_range': f"{times_hours.min():.2f}-{times_hours.max():.2f} hours",
         'targets': list(set(h['target'] for h in all_headers if h)),
         'instruments': list(set(h['instrument'] for h in all_headers if h)),
         'filters': list(set(h['filter'] for h in all_headers if h)),
@@ -603,9 +417,9 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
         'flux_unit': all_headers[0]['flux_unit'] if all_headers else 'Unknown',
     }
 
-    logger.info(f"📊 PROCESSING COMPLETE:")
+    logger.info(f"PROCESSING COMPLETE:")
     logger.info(f"   Original integrations: {original_count}")
-    logger.info(f"   Final time points:  {len(times_hours)}")
+    logger.info(f"   Final time points: {len(times_hours)}")
     logger.info(f"   Wavelength points: {len(common_wl)}")
     logger.info(f"   Flux shape: {flux_norm_2d.shape}")
 

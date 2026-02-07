@@ -1,16 +1,5 @@
 """
-data_io.py
-File I/O for JWST spectral data.
-
-Handles reading both FITS (_x1dints.fits from the JWST pipeline) and HDF5
-(Eureka! reduction outputs) file formats.  Each reader returns a uniform
-list-of-dicts representation that the processing pipeline consumes.
-
-Public functions
-----------------
-apply_data_ranges    Filter wavelength/time axes to user-specified ranges.
-load_integrations_from_h5   Read spectra from an HDF5 file.
-load_integrations_from_fits Read spectra from a FITS file (3 format variants).
+File I/O for JWST spectral data (FITS and HDF5 formats).
 """
 
 import os
@@ -24,67 +13,24 @@ import h5py
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _first_key(group, *candidates):
-    """Return the first key from *candidates* that exists in *group*.
-
-    Used to handle flexible naming conventions across HDF5 files produced by
-    different reduction pipelines (e.g. Eureka!, Tiberius, etc.).
-
-    Parameters
-    ----------
-    group : dict-like
-        An HDF5 group or Python dictionary.
-    *candidates : str
-        Key names to try, in priority order.
-
-    Returns
-    -------
-    str or None
-        The first matching key, or ``None`` if none match.
-    """
+    """Return the first key from candidates that exists in group, or None."""
     for k in candidates:
         if k in group:
             return k
     return None
 
 
-# ---------------------------------------------------------------------------
-# Range filtering
-# ---------------------------------------------------------------------------
-
 def apply_data_ranges(wavelength, flux, time, wavelength_range=None,
                       time_range=None):
     """Filter wavelength and time axes to user-specified ranges.
-
-    Parameters
-    ----------
-    wavelength : np.ndarray
-        1-D wavelength array (microns).
-    flux : np.ndarray
-        2-D flux array, shape ``(n_wavelength, n_time)``.
-    time : np.ndarray
-        1-D time array (hours since first observation).
-    wavelength_range : tuple of (float|None, float|None), optional
-        ``(min_wl, max_wl)`` in microns.
-    time_range : tuple of (float|None, float|None), optional
-        ``(min_t, max_t)`` in hours.
-
-    Returns
-    -------
-    tuple
-        ``(filtered_wavelength, filtered_flux, filtered_time, range_info)``
-        where *range_info* is a list of human-readable strings describing
-        the applied filters.
+    Returns (filtered_wavelength, filtered_flux, filtered_time, range_info).
     """
     range_info = []
     original_wl_range = (wavelength.min(), wavelength.max())
     original_time_range = (time.min(), time.max())
 
-    # --- Wavelength mask ---------------------------------------------------
+    # Wavelength mask
     if wavelength_range and (wavelength_range[0] is not None
                              or wavelength_range[1] is not None):
         wl_min = (wavelength_range[0]
@@ -100,11 +46,11 @@ def apply_data_ranges(wavelength, flux, time, wavelength_range=None,
             wl_mask = np.ones(len(wavelength), dtype=bool)
         else:
             wl_mask = (wavelength >= wl_min) & (wavelength <= wl_max)
-            range_info.append(f"Wavelength: {wl_min:.3f} - {wl_max:.3f} µm")
+            range_info.append(f"Wavelength: {wl_min:.3f} - {wl_max:.3f} um")
     else:
         wl_mask = np.ones(len(wavelength), dtype=bool)
 
-    # --- Time mask ---------------------------------------------------------
+    # Time mask
     if time_range and (time_range[0] is not None
                        or time_range[1] is not None):
         time_min = (time_range[0]
@@ -124,7 +70,6 @@ def apply_data_ranges(wavelength, flux, time, wavelength_range=None,
     else:
         time_mask = np.ones(len(time), dtype=bool)
 
-    # --- Apply masks -------------------------------------------------------
     filtered_wavelength = wavelength[wl_mask]
     filtered_flux = flux[wl_mask, :][:, time_mask]
     filtered_time = time[time_mask]
@@ -139,34 +84,10 @@ def apply_data_ranges(wavelength, flux, time, wavelength_range=None,
     return filtered_wavelength, filtered_flux, filtered_time, range_info
 
 
-# ---------------------------------------------------------------------------
-# HDF5 loader
-# ---------------------------------------------------------------------------
-
 def load_integrations_from_h5(file_path, per_integ_cb=None,
                               total_in_file=None):
     """Load spectral integrations from an HDF5 file.
-
-    Supports multiple key naming conventions used by Eureka!, Tiberius,
-    and similar JWST reduction pipelines.
-
-    Parameters
-    ----------
-    file_path : str
-        Path to the ``.h5`` file.
-    per_integ_cb : callable, optional
-        ``callback(done, total)`` called after each integration is read,
-        used for progress reporting.
-    total_in_file : int, optional
-        Override for integration count (used by the progress callback).
-
-    Returns
-    -------
-    tuple
-        ``(integrations, header_info)`` where *integrations* is a list of
-        dicts with keys ``wavelength``, ``flux``, ``error``, ``time``, and
-        *header_info* is a metadata dict.  Returns ``(None, None)`` on
-        critical failure.
+    Returns (integrations, header_info) or (None, None) on failure.
     """
     with h5py.File(file_path, 'r') as f:
         flux_k = _first_key(f, "calibrated_optspec", "stdspec", "optspec")
@@ -181,7 +102,6 @@ def load_integrations_from_h5(file_path, per_integ_cb=None,
         wl = f[wave_k][:]
         t = f[time_k][:]
 
-        # Handle error arrays; stdvar stores variance, so take sqrt
         err = None
         if err_k:
             err_data = f[err_k][:]
@@ -216,56 +136,28 @@ def load_integrations_from_h5(file_path, per_integ_cb=None,
         return integrations, header_info
 
 
-# ---------------------------------------------------------------------------
-# FITS loader
-# ---------------------------------------------------------------------------
-
 def load_integrations_from_fits(file_path, per_integ_cb=None,
                                 total_in_file=None):
-    """Load spectral integrations from a JWST ``_x1dints.fits`` file.
-
-    This function handles three distinct FITS layout variants produced by
-    different versions of the JWST calibration pipeline:
-
-    1. **Table with embedded time columns** — a single EXTRACT1D table
-       that contains ``MJD-AVG`` / ``MJD-BEG`` / ``MJD-END`` columns.
-    2. **Individual EXTRACT1D extensions** — one extension per integration,
-       paired with times from the ``INT_TIMES`` table.
-    3. **Single table + INT_TIMES fallback** — a single EXTRACT1D table
-       *without* time columns; times are taken row-by-row from INT_TIMES.
-
-    Parameters
-    ----------
-    file_path : str
-        Path to the ``.fits`` file.
-    per_integ_cb : callable, optional
-        ``callback(done, total)`` called after each integration is read.
-    total_in_file : int, optional
-        Override for integration count (used by the progress callback).
-
-    Returns
-    -------
-    tuple
-        ``(integrations, header_info)`` — see :func:`load_integrations_from_h5`
-        for the dict format.  Returns ``(None, None)`` on failure.
+    """Load spectral integrations from a JWST _x1dints.fits file.
+    Handles three FITS layout variants. Returns (integrations, header_info)
+    or (None, None) on failure.
     """
     try:
-        logger.info(f"📂 Opening FITS file: {os.path.basename(file_path)}")
+        logger.info(f"Opening FITS file: {os.path.basename(file_path)}")
         with fits.open(file_path) as hdul:
             logger.info(f"   Available extensions: {[hdu.name for hdu in hdul]}")
 
             if 'INT_TIMES' not in hdul:
-                logger.error(f"   ❌ No INT_TIMES extension found")
+                logger.error(f"   No INT_TIMES extension found")
                 return None, None
 
             mids = hdul['INT_TIMES'].data['int_mid_MJD_UTC']
-            logger.info(f"   ✓ Found INT_TIMES with {len(mids)} entries")
+            logger.info(f"   Found INT_TIMES with {len(mids)} entries")
 
             if 'EXTRACT1D' not in hdul:
-                logger.error(f"   ❌ No EXTRACT1D extension found")
+                logger.error(f"   No EXTRACT1D extension found")
                 return None, None
 
-            # --- Collect header metadata -----------------------------------
             header_info = {
                 'filename': os.path.basename(file_path),
                 'target': hdul[0].header.get('TARGNAME', 'Unknown'),
@@ -276,7 +168,6 @@ def load_integrations_from_fits(file_path, per_integ_cb=None,
                 'exposure_time': hdul[0].header.get('EXPTIME', 'Unknown'),
             }
 
-            # Determine flux unit from available headers
             flux_unit = hdul[0].header.get('BUNIT', None)
             if flux_unit is None and 'EXTRACT1D' in hdul:
                 flux_unit = hdul['EXTRACT1D'].header.get('BUNIT', None)
@@ -294,9 +185,7 @@ def load_integrations_from_fits(file_path, per_integ_cb=None,
             integrations = []
             nint = len(mids)
 
-            # ---------------------------------------------------------------
-            # Detect which of the three FITS layout variants we have
-            # ---------------------------------------------------------------
+            # Detect which FITS layout variant we have
             extract_table = hdul['EXTRACT1D'].data
             has_table_format = len(extract_table) > 0
             has_time_in_table = any(
@@ -304,18 +193,15 @@ def load_integrations_from_fits(file_path, per_integ_cb=None,
                 for col in ['MJD-AVG', 'MJD-BEG', 'MJD-END']
             )
 
-            # ---------------------------------------------------------------
             # Branch 1: Table with embedded MJD time columns
-            # ---------------------------------------------------------------
             if has_table_format and has_time_in_table:
                 logger.info(
-                    f"   ✓ EXTRACT1D format:  table with embedded time columns"
+                    f"   EXTRACT1D format: table with embedded time columns"
                 )
                 logger.info(
                     f"   Processing {len(extract_table)} integrations from table..."
                 )
 
-                # Choose time column (priority: MJD-AVG > MJD-BEG > MJD-END)
                 time_col = None
                 if 'MJD-AVG' in extract_table.columns.names:
                     time_col = 'MJD-AVG'
@@ -336,7 +222,6 @@ def load_integrations_from_fits(file_path, per_integ_cb=None,
                              else np.full_like(f, np.nan))
                         mjd = row[time_col]
 
-                        # Mask out NaN / Inf values in wavelength and flux
                         mask = np.isfinite(f) & np.isfinite(w)
                         n_valid = np.sum(mask)
 
@@ -346,10 +231,9 @@ def load_integrations_from_fits(file_path, per_integ_cb=None,
                                 f"valid flux points, time={mjd:.6f}"
                             )
 
-                        # Skip if too few valid data points
                         if n_valid < 10:
                             logger.warning(
-                                f"   ⚠️ Skipping integration {idx + 1}:  "
+                                f"   Skipping integration {idx + 1}: "
                                 f"only {n_valid} valid points"
                             )
                             continue
@@ -366,26 +250,22 @@ def load_integrations_from_fits(file_path, per_integ_cb=None,
 
                     except Exception as e:
                         logger.error(
-                            f"   ❌ ERROR processing integration {idx + 1}:  {e}",
+                            f"   ERROR processing integration {idx + 1}: {e}",
                             exc_info=True,
                         )
                         continue
 
             else:
-                # -----------------------------------------------------------
-                # Check whether individual EXTRACT1D extensions exist
-                # -----------------------------------------------------------
+                # Check for individual EXTRACT1D extensions
                 has_individual_extensions = False
                 try:
                     test_data = hdul['EXTRACT1D', 1].data
                     has_individual_extensions = True
-                    logger.info(f"   ✓ EXTRACT1D format: individual extensions")
+                    logger.info(f"   EXTRACT1D format: individual extensions")
                 except (KeyError, IndexError, TypeError):
-                    logger.info(f"   ✓ EXTRACT1D format: single table")
+                    logger.info(f"   EXTRACT1D format: single table")
 
-                # -----------------------------------------------------------
                 # Branch 2: Individual EXTRACT1D extensions (1-indexed)
-                # -----------------------------------------------------------
                 if has_individual_extensions:
                     logger.info(
                         f"   Processing {nint} individual EXTRACT1D extensions..."
@@ -410,7 +290,7 @@ def load_integrations_from_fits(file_path, per_integ_cb=None,
 
                             if n_valid < 10:
                                 logger.warning(
-                                    f"   ⚠️ Skipping integration {idx}: "
+                                    f"   Skipping integration {idx}: "
                                     f"only {n_valid} valid points"
                                 )
                                 continue
@@ -426,14 +306,12 @@ def load_integrations_from_fits(file_path, per_integ_cb=None,
 
                         except (KeyError, IndexError) as e:
                             logger.error(
-                                f"   ❌ ERROR processing integration {idx}: {e}",
+                                f"   ERROR processing integration {idx}: {e}",
                                 exc_info=True,
                             )
                             continue
 
-                # -----------------------------------------------------------
                 # Branch 3: Single table, times from INT_TIMES
-                # -----------------------------------------------------------
                 else:
                     logger.info(
                         f"   Processing {nint} integrations from table "
@@ -443,7 +321,7 @@ def load_integrations_from_fits(file_path, per_integ_cb=None,
                     for idx, mjd in enumerate(mids):
                         if idx >= len(extract_table):
                             logger.warning(
-                                f"   ⚠️ Skipping integration {idx + 1}:  "
+                                f"   Skipping integration {idx + 1}: "
                                 f"table only has {len(extract_table)} rows"
                             )
                             continue
@@ -467,7 +345,7 @@ def load_integrations_from_fits(file_path, per_integ_cb=None,
 
                             if n_valid < 10:
                                 logger.warning(
-                                    f"   ⚠️ Skipping integration {idx + 1}: "
+                                    f"   Skipping integration {idx + 1}: "
                                     f"only {n_valid} valid points"
                                 )
                                 continue
@@ -483,24 +361,24 @@ def load_integrations_from_fits(file_path, per_integ_cb=None,
 
                         except Exception as e:
                             logger.error(
-                                f"   ❌ ERROR processing integration {idx + 1}: {e}",
+                                f"   ERROR processing integration {idx + 1}: {e}",
                                 exc_info=True,
                             )
                             continue
 
             logger.info(
-                f"   ✅ Loaded {len(integrations)} integrations "
+                f"   Loaded {len(integrations)} integrations "
                 f"from {len(mids)} INT_TIMES entries"
             )
 
             if len(integrations) == 0:
-                logger.error(f"   ❌ No integrations were successfully loaded!")
+                logger.error(f"   No integrations were successfully loaded!")
                 return None, None
 
             return integrations, header_info
 
     except Exception as e:
         logger.error(
-            f"❌ Error reading FITS file {file_path}: {e}", exc_info=True
+            f"Error reading FITS file {file_path}: {e}", exc_info=True
         )
         return None, None

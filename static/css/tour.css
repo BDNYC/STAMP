@@ -1,20 +1,16 @@
-/*
-========================================
-STAMP Tour Styles
-========================================
-*/
+/* STAMP Tour Styles */
 
-/* Initial Tour Prompt - Fixed Right Side */
+/* Tour Prompt */
 #tourPrompt {
     position: fixed;
-    right: 30px; /* Fallback if JS fails */
+    right: 30px;
     top: 50%;
     transform: translateY(-50%);
     background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
     border: 2px solid #3b82f6;
     border-radius: 12px;
-    padding: 16px; /* Reduced from 20px */
-    width: 240px; /* Reduced from 280px */
+    padding: 16px;
+    width: 240px;
     z-index: 10000;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     animation: slideInRight 0.5s ease-out;
@@ -84,7 +80,7 @@ STAMP Tour Styles
     background: #4b5563;
 }
 
-/* Tour Message Box - Positioned Dynamically */
+/* Tour Message Box */
 #tourMessageBox {
     position: fixed;
     right: 30px;
@@ -98,15 +94,15 @@ STAMP Tour Styles
     max-width: calc(100vw - 40px);
     z-index: 10001;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
-    animation: fadeIn 0.2s ease-out; /* Faster initial fade */
-    transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1), /* Faster transitions */
+    animation: fadeIn 0.2s ease-out;
+    transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1),
                 top 0.25s cubic-bezier(0.4, 0, 0.2, 1),
                 transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
                 opacity 0.15s ease-out;
     position: relative;
 }
 
-/* Close X button - ADD THIS NEW SECTION */
+/* Close X button */
 .tour-close-x {
     position: absolute;
     top: 8px;
@@ -142,7 +138,7 @@ STAMP Tour Styles
     font-size: 16px;
     font-weight: 600;
     margin: 0 0 12px 0;
-    padding-right: 24px; /* Make room for X button */
+    padding-right: 24px;
     transition: opacity 0.2s ease-out;
 }
 
@@ -209,7 +205,7 @@ STAMP Tour Styles
     margin-top: 12px;
 }
 
-/* Dark Overlay - transparent base, cutout sections handle darkening */
+/* Dark Overlay */
 #tourOverlay {
     position: fixed;
     top: 0;
@@ -222,13 +218,12 @@ STAMP Tour Styles
     pointer-events: none;
 }
 
-/* Keep 3D plot visible and colorful during band selection */
+/* Keep 3D plot visible during band selection */
 #tourOverlay.preserve-plot {
     background: rgba(0, 0, 0, 0.7);
     pointer-events: none;
 }
 
-/* Cut out the plot area from the overlay during band selection */
 #tourOverlay.preserve-plot::before {
     content: '';
     position: absolute;
@@ -240,7 +235,7 @@ STAMP Tour Styles
 }
 
 
-/* Highlight Box with White Glow - Just border, no background */
+/* Highlight Box */
 #tourHighlight {
     position: absolute;
     border: 3px solid #ffffff;
@@ -258,7 +253,7 @@ STAMP Tour Styles
     opacity: 1;
 }
 
-/* Remove brightening effect for 3D plot to prevent white-out */
+/* Remove brightening for 3D plot */
 #tourHighlight.highlight-plot {
     background: transparent !important;
     backdrop-filter: none !important;
@@ -271,7 +266,7 @@ STAMP Tour Styles
 }
 
 
-/* Allow clicks through highlight on specific elements */
+/* Allow clicks through highlight */
 #tourHighlight.allow-interaction {
     pointer-events: none;
 }
@@ -359,7 +354,8 @@ STAMP Tour Styles
 body.tour-active {
     overflow-x: hidden;
 }
-/* Multi-highlight boxes with no background - just borders */
+
+/* Multi-highlight boxes */
 .tour-multi-highlight {
     background: transparent !important;
     backdrop-filter: none !important;

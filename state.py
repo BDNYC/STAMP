@@ -1,19 +1,8 @@
 """
-state.py
-Thread-safe shared mutable state for SA3D (STAMP).
+Thread-safe shared mutable state for STAMP.
 
-All mutable global state lives here so that dependencies are explicit and
-there are no scattered ``globals()[]`` calls. Background job workers, Flask
-route handlers, and the download/export code all read and write through this
-module's attributes.
-
-Usage from other modules::
-
-    import state
-
-    state.latest_surface_figure = fig          # write
-    html = state.last_surface_plot_html        # read
-    state._progress_set(job_id, percent=50)    # update progress
+All mutable global state lives here so that dependencies are explicit.
+Other modules read/write through this module's attributes.
 """
 
 import threading
@@ -21,27 +10,19 @@ import time as _time
 
 from cache_manager import DatasetCache
 
-# ---------------------------------------------------------------------------
 # Background-job tracking
-# ---------------------------------------------------------------------------
-PROGRESS = {}          # job_id  ->  progress record dict
-RESULTS = {}           # job_id  ->  completed result payload dict
-PROG_LOCK = threading.Lock()  # guards both PROGRESS and RESULTS
+PROGRESS = {}          # job_id -> progress record dict
+RESULTS = {}           # job_id -> completed result payload dict
+PROG_LOCK = threading.Lock()
 
-# ---------------------------------------------------------------------------
 # Dataset cache (disk-backed, LRU, 24-hour TTL, 10 GB cap)
-# ---------------------------------------------------------------------------
 cache = DatasetCache(ttl_hours=24, max_cache_size_gb=10)
 
-# ---------------------------------------------------------------------------
-# Latest plot objects (shared between route handlers)
-# ---------------------------------------------------------------------------
+# Latest plot objects shared between route handlers
 latest_surface_figure = None
 latest_heatmap_figure = None
 latest_spectrum_video_path = None
 
-# These replace the previous ``globals()['...']`` pattern.  Each attribute
-# is set after a job completes and read by /download_plots.
 last_surface_plot_html = None
 last_heatmap_plot_html = None
 last_surface_fig_json = None
@@ -49,46 +30,15 @@ last_heatmap_fig_json = None
 last_custom_bands = []
 latest_spectrum_mp4_path = None
 
-# Per-token video temp paths.  Replaces ``globals()[f'_video_tmp_{token}']``.
+# Per-token video temp paths
 video_tmp_paths = {}
 
 
-# ---------------------------------------------------------------------------
-# Progress helper
-# ---------------------------------------------------------------------------
 def _progress_set(job_id, *, percent=None, message=None, status=None,
                   reset=False, stage=None, processed_integrations=None,
                   total_integrations=None, throughput=None, eta_seconds=None):
     """Create or update a background-job progress record (thread-safe).
-
-    Parameters
-    ----------
-    job_id : str
-        Unique identifier for the background job.
-    percent : float, optional
-        Completion percentage (clamped to 0-99 unless status is 'done').
-    message : str, optional
-        Human-readable status message shown in the UI.
-    status : str, optional
-        One of 'running', 'done', or 'error'.
-    reset : bool
-        If True, re-initialise the record from scratch.
-    stage : str, optional
-        Pipeline stage name ('queued', 'scan', 'read', 'regrid', 'finalize', 'done').
-    processed_integrations : int, optional
-        Number of integrations processed so far.
-    total_integrations : int, optional
-        Total integrations expected.
-    throughput : float, optional
-        Processing speed (integrations/sec).
-    eta_seconds : int, optional
-        Explicit ETA override.  If not given, ETA is computed from elapsed
-        time and current percentage.
-
-    Returns
-    -------
-    dict
-        A snapshot copy of the progress record after mutation.
+    Returns a snapshot copy of the record.
     """
     with PROG_LOCK:
         rec = PROGRESS.get(job_id)
@@ -108,12 +58,10 @@ def _progress_set(job_id, *, percent=None, message=None, status=None,
 
         if percent is not None:
             p = float(percent)
-            # Cap at 99% until the job explicitly sets status='done'
             if status != "done":
                 p = max(0.0, min(99.0, p))
             rec["percent"] = p
 
-            # Compute or override ETA
             frac = p / 100.0
             if eta_seconds is not None:
                 rec["eta_seconds"] = int(eta_seconds)

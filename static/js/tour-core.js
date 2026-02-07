@@ -1,53 +1,28 @@
-/*
- * ============================================================================
- * tour-core.js — Tour Lifecycle, Navigation & Step Display
- * ============================================================================
- *
- * This file is loaded LAST among the tour scripts. It orchestrates the tour
- * by wiring up DOM event listeners, managing step transitions, and calling
- * visual functions defined in tour-overlay.js.
- *
- * Dependencies (must be loaded before this file):
- *   tour-steps.js   — tourSteps[], currentStep, tourActive, TOUR_STORAGE_KEY
- *   tour-overlay.js — highlightElement(), highlightMultipleElements(),
- *                     updateOverlayWithCutouts(), scrollToElement(),
- *                     positionMessageBox()
- *
- * Exports to global scope:
- *   window.tourActive  — getter function used by main.js to check tour state
- *
- * Load order:  tour-steps.js → tour-overlay.js → tour-core.js
- * ============================================================================
- */
+/* tour-core.js -- Tour Lifecycle, Navigation & Step Display */
 
-console.log(' TOUR-CORE.JS LOADED');
+console.log('TOUR-CORE.JS LOADED');
 
-// ---------------------------------------------------------------------------
-// Timer & state tracking — cleared on every step transition and tour end
-// ---------------------------------------------------------------------------
+/* Timer & state tracking -- cleared on every step transition and tour end */
 
-/** @type {number|null} Interval ID from waitForCondition(), cleared on step change */
+/** Interval ID from waitForCondition(), cleared on step change */
 let activeWaitInterval = null;
 
-/** @type {number|null} Timeout ID from autoNext setTimeout, cleared on step change */
+/** Timeout ID from autoNext setTimeout, cleared on step change */
 let autoNextTimeout = null;
 
-/** @type {number|null} Timeout ID for the highlight/position delay after scrolling */
+/** Timeout ID for the highlight/position delay after scrolling */
 let highlightTimeout = null;
 
-/** @type {number|null} rAF ID for scroll-settled detection loop */
+/** rAF ID for scroll-settled detection loop */
 let scrollCheckRafId = null;
 
-/** @type {boolean} True when the end step is displayed; makes Next call endTour() */
+/** True when the end step is displayed; makes Next call endTour() */
 let isOnEndStep = false;
 
-/** @type {boolean} True when user pressed Back; suppresses waitFor/autoNext on the target step */
+/** True when user pressed Back; suppresses waitFor/autoNext on the target step */
 let navigatingBack = false;
 
-/**
- * Cancel any running waitForCondition interval and autoNext timeout.
- * Called at the start of every showStep() and in endTour()/startTour().
- */
+/** Cancel any running waitForCondition interval and autoNext timeout. */
 function clearActiveTimers() {
     if (activeWaitInterval !== null) {
         clearInterval(activeWaitInterval);
@@ -67,12 +42,7 @@ function clearActiveTimers() {
     }
 }
 
-/**
- * Synchronously check whether a waitFor condition is already satisfied.
- *
- * @param {string} condition - 'plotsLoaded' or 'spectrumOpened'
- * @returns {boolean} True if the condition is already met right now.
- */
+/** Check whether a waitFor condition is already satisfied. */
 function isConditionCurrentlyMet(condition) {
     if (condition === 'plotsLoaded') {
         return window.stampsDataLoaded === true;
@@ -86,14 +56,9 @@ function isConditionCurrentlyMet(condition) {
     return false;
 }
 
-// ---------------------------------------------------------------------------
-// Initialization — runs once when the DOM is ready
-// ---------------------------------------------------------------------------
+/* Initialization -- runs once when the DOM is ready */
 
-/**
- * Bootstrap the tour system on page load.
- * Shows the initial tour prompt after a short delay and binds all UI buttons.
- */
+/** Bootstrap the tour system on page load. */
 document.addEventListener('DOMContentLoaded', function () {
     // Always show tour prompt on page load
     setTimeout(() => {
@@ -104,20 +69,9 @@ document.addEventListener('DOMContentLoaded', function () {
     setupEventListeners();
 });
 
-// ---------------------------------------------------------------------------
-// Event Binding
-// ---------------------------------------------------------------------------
+/* Event Binding */
 
-/**
- * Bind click handlers to all tour UI buttons.
- *
- * Buttons wired:
- *   - #tourAcceptBtn   → startTour()
- *   - #tourDeclineBtn  → declineTour()
- *   - #tourNextBtn     → nextStep()
- *   - #tourPrevBtn     → prevStep()
- *   - #tourCloseBtn    → endTour()   (the "X" close button)
- */
+/** Bind click handlers to all tour UI buttons. */
 function setupEventListeners() {
     // Tour accept/decline
     const acceptBtn = document.getElementById('tourAcceptBtn');
@@ -149,15 +103,9 @@ function setupEventListeners() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tour Prompt (the initial "Want a tour?" dialog)
-// ---------------------------------------------------------------------------
+/* Tour Prompt */
 
-/**
- * Display the initial tour prompt dialog.
- * Calculates an optimal horizontal position so the prompt sits centered in
- * the space to the right of the main content container.
- */
+/** Display the initial tour prompt dialog with optimal positioning. */
 function showTourPrompt() {
     const prompt = document.getElementById('tourPrompt');
     if (prompt) {
@@ -182,7 +130,7 @@ function showTourPrompt() {
             prompt.style.left = finalLeft + 'px';
             prompt.style.right = 'auto';
 
-            console.log('📍 Tour Prompt Positioning:');
+            console.log('Tour Prompt Positioning:');
             console.log('  Container right edge:', containerRect.right);
             console.log('  Viewport width:', viewportWidth);
             console.log('  Space after container:', spaceAfterContainer);
@@ -192,9 +140,7 @@ function showTourPrompt() {
     }
 }
 
-/**
- * Hide the tour prompt dialog.
- */
+/** Hide the tour prompt dialog. */
 function hideTourPrompt() {
     const prompt = document.getElementById('tourPrompt');
     if (prompt) {
@@ -202,16 +148,9 @@ function hideTourPrompt() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tour Start / Decline
-// ---------------------------------------------------------------------------
+/* Tour Start / Decline */
 
-/**
- * Begin the interactive tour.
- *
- * Hides the prompt, sets tour state to active, scrolls to the top of the
- * page, and displays the first step after layout settles.
- */
+/** Begin the interactive tour. */
 function startTour() {
     hideTourPrompt();
     tourActive = true;
@@ -254,34 +193,16 @@ function startTour() {
     });
 }
 
-/**
- * Decline the tour — simply hides the prompt without saving any state.
- */
+/** Decline the tour -- simply hides the prompt. */
 function declineTour() {
     hideTourPrompt();
 }
 
-// ---------------------------------------------------------------------------
-// Step Display — the core rendering function
-// ---------------------------------------------------------------------------
+/* Step Display -- the core rendering function */
 
-/**
- * Display a specific tour step.
- *
- * This is the central function that drives each step transition. It:
- *   1. Validates the step index.
- *   2. Updates the message box content (title, body text).
- *   3. Toggles the Back button visibility.
- *   4. Shows the overlay backdrop.
- *   5. Delegates to the end-step handler for the final step.
- *   6. Scrolls to the target element (if needed).
- *   7. Highlights the element(s) and positions the message box.
- *   8. Sets up wait conditions (e.g. waiting for data to load).
- *
- * @param {number} stepIndex - Zero-based index into the tourSteps array.
- */
+/** Display a specific tour step by index. */
 function showStep(stepIndex) {
-    // --- 0. Clean up timers and state from the previous step ---
+    // Clean up timers and state from the previous step
     clearActiveTimers();
     isOnEndStep = false;
 
@@ -291,13 +212,13 @@ function showStep(stepIndex) {
 
     const step = tourSteps[stepIndex];
 
-    // --- 1. Validation ---
+    // Validation
     if (!step) {
         endTour();
         return;
     }
 
-    // --- 2. Update message box content ---
+    // Update message box content
     updateStepCounter(stepIndex);
 
     const titleEl = document.getElementById('tourTitle');
@@ -309,7 +230,7 @@ function showStep(stepIndex) {
     if (titleEl) titleEl.textContent = step.title;
     if (messageEl) messageEl.textContent = step.message;
 
-    // --- 3. Back button visibility ---
+    // Back button visibility
     if (prevBtn) {
         if (stepIndex > 0) {
             prevBtn.classList.remove('hidden');
@@ -318,7 +239,7 @@ function showStep(stepIndex) {
         }
     }
 
-    // --- 4. Show overlay (transparent; cutouts handle darkening) ---
+    // Show overlay (transparent; cutouts handle darkening)
     const overlay = document.getElementById('tourOverlay');
     if (overlay) {
         overlay.classList.remove('hidden');
@@ -327,7 +248,7 @@ function showStep(stepIndex) {
         overlay.style.clipPath = '';
     }
 
-    // --- 5. Handle end step ---
+    // Handle end step
     if (step.isEnd) {
         showEndStep();
         return;
@@ -339,10 +260,10 @@ function showStep(stepIndex) {
         messageBox.classList.remove('positioning');
     }
 
-    // --- 6–7. Scroll, highlight, and position ---
+    // Scroll, highlight, and position
     if (step.element) {
         const element = document.querySelector(step.element);
-        console.log(' Tour Step:', step.id, 'Element:', step.element, 'Found:', element);
+        console.log('Tour Step:', step.id, 'Element:', step.element, 'Found:', element);
 
         if (element) {
             // Clear focus from this element if it has it
@@ -352,7 +273,7 @@ function showStep(stepIndex) {
 
             // When step highlights multiple elements, compute a combined
             // bounding rect so the scroll and visibility check cover the
-            // full highlighted region (not just the primary element).
+            // full highlighted region.
             let rect;
             if (step.highlightMultiple && Array.isArray(step.highlightMultiple)) {
                 const rects = step.highlightMultiple
@@ -384,13 +305,9 @@ function showStep(stepIndex) {
                 rect.right <= (window.innerWidth || document.documentElement.clientWidth)
             );
 
-            // On back-navigation, ignore skipScroll — the user may have
-            // scrolled far away and needs to see the target element.
+            // On back-navigation, ignore skipScroll
             const shouldSkipScroll = step.skipScroll && !isBackNavigation;
 
-            // Only scroll if target is off-screen and skipScroll is not active.
-            // When highlightMultiple is set, scroll to center the combined
-            // region rather than just the primary element.
             const needsScroll = !shouldSkipScroll && !isInView;
             if (needsScroll) {
                 if (step.highlightMultiple && Array.isArray(step.highlightMultiple)) {
@@ -424,13 +341,10 @@ function showStep(stepIndex) {
             };
 
             if (needsScroll) {
-                // Suppress CSS transition so the message box snaps to the
-                // new position instead of animating from the previous
-                // step's (possibly off-screen) location.
+                // Suppress CSS transition so the message box snaps to the new position
                 if (messageBox) messageBox.style.transition = 'none';
 
-                // Wait for smooth scroll to actually finish before
-                // positioning.  Poll via rAF until scroll stops moving.
+                // Wait for smooth scroll to finish before positioning.
                 let lastY = window.pageYOffset;
                 let stableFrames = 0;
 
@@ -459,7 +373,7 @@ function showStep(stepIndex) {
             }
         }
     } else {
-        // No element to highlight — center the message box on screen
+        // No element to highlight -- center the message box on screen
         if (messageBox) {
             messageBox.style.position = 'fixed';
             messageBox.style.left = '50%';
@@ -468,19 +382,17 @@ function showStep(stepIndex) {
         }
     }
 
-    // --- 8. Wait conditions ---
+    // Wait conditions
     if (step.waitFor) {
         const alreadyMet = isConditionCurrentlyMet(step.waitFor);
 
         if (isBackNavigation || alreadyMet) {
-            // Back-navigation or condition already satisfied:
-            // Just enable Next immediately — do NOT auto-advance.
             if (nextBtn) {
                 nextBtn.disabled = false;
                 nextBtn.textContent = 'Next';
             }
         } else {
-            // Condition not yet met — disable Next and start polling.
+            // Condition not yet met -- disable Next and start polling.
             if (nextBtn) {
                 nextBtn.disabled = true;
                 nextBtn.textContent = 'Waiting...';
@@ -494,15 +406,13 @@ function showStep(stepIndex) {
                     nextBtn.disabled = false;
                     nextBtn.textContent = 'Next';
                 }
-                // Auto-advance only when the condition transitioned
-                // from false to true while the user was watching.
                 if (step.autoNext === true) {
                     autoNextTimeout = setTimeout(nextStep, 1500);
                 }
             });
         }
     } else {
-        // No wait — ensure Next button is enabled
+        // No wait -- ensure Next button is enabled
         if (nextBtn) {
             nextBtn.disabled = false;
             nextBtn.textContent = 'Next';
@@ -510,15 +420,9 @@ function showStep(stepIndex) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Step Counter
-// ---------------------------------------------------------------------------
+/* Step Counter */
 
-/**
- * Update the "Step X of Y" counter text.
- *
- * @param {number} stepIndex - Zero-based index of the current step.
- */
+/** Update the "Step X of Y" counter text. */
 function updateStepCounter(stepIndex) {
     const counter = document.getElementById('tourStepCounter');
     if (counter) {
@@ -526,15 +430,10 @@ function updateStepCounter(stepIndex) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Navigation — Next / Previous
-// ---------------------------------------------------------------------------
+/* Navigation -- Next / Previous */
 
-/**
- * Advance to the next tour step, or end the tour if on the last step.
- */
+/** Advance to the next tour step, or end the tour if on the last step. */
 function nextStep() {
-    // If we are on the end step, "Next" means "Finish" — end the tour.
     if (isOnEndStep) {
         endTour();
         return;
@@ -548,9 +447,7 @@ function nextStep() {
     }
 }
 
-/**
- * Go back to the previous tour step (no-op if already on step 0).
- */
+/** Go back to the previous tour step. */
 function prevStep() {
     if (currentStep > 0) {
         currentStep--;
@@ -559,16 +456,9 @@ function prevStep() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// End Step & Tour Cleanup
-// ---------------------------------------------------------------------------
+/* End Step & Tour Cleanup */
 
-/**
- * Display the final "Tour Complete!" step.
- *
- * Hides the highlight, centers the message box on screen, changes the Next
- * button to "Finish", and hides the Back button.
- */
+/** Display the final "Tour Complete!" step. */
 function showEndStep() {
     const messageBox = document.getElementById('tourMessageBox');
     const nextBtn = document.getElementById('tourNextBtn');
@@ -589,8 +479,6 @@ function showEndStep() {
     }
 
     // Change Next button to "Finish" and set flag for nextStep() to check.
-    // DO NOT use nextBtn.onclick — it coexists with the addEventListener
-    // handler and causes both nextStep() and endTour() to fire.
     if (nextBtn) {
         nextBtn.textContent = 'Finish';
         nextBtn.disabled = false;
@@ -601,18 +489,7 @@ function showEndStep() {
     if (prevBtn) prevBtn.classList.add('hidden');
 }
 
-/**
- * End the tour and clean up all tour-related DOM modifications.
- *
- * Cleanup includes:
- *   - Resetting the tourActive flag
- *   - Clearing cached message-box positions
- *   - Removing the `tour-active` body class (re-enables horizontal scroll)
- *   - Resetting z-index overrides applied to interactive elements
- *   - Hiding the message box, overlay, and highlight
- *   - Removing dynamically created multi-highlight and overlay-section elements
- *   - Re-showing the tour prompt after a short delay
- */
+/** End the tour and clean up all tour-related DOM modifications. */
 function endTour() {
     tourActive = false;
 
@@ -673,22 +550,9 @@ function endTour() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Condition Waiting — polls for async events before enabling "Next"
-// ---------------------------------------------------------------------------
+/* Condition Waiting -- polls for async events before enabling "Next" */
 
-/**
- * Poll for an asynchronous condition and invoke a callback when it resolves.
- *
- * Supported conditions:
- *   - 'plotsLoaded'     — waits until window.stampsDataLoaded === true
- *                         (set by main.js after data processing completes)
- *   - 'spectrumOpened'  — waits until the #enableSurfaceClick checkbox is
- *                         checked AND #spectrumContainer is visible
- *
- * @param {string}   condition - The condition identifier to wait for.
- * @param {Function} callback  - Called once the condition is satisfied.
- */
+/** Poll for an async condition and invoke callback when it resolves. */
 function waitForCondition(condition, callback) {
     // Clear any previously running wait interval (safety net)
     if (activeWaitInterval !== null) {
@@ -721,12 +585,7 @@ function waitForCondition(condition, callback) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Global Export — used by main.js to check if tour is active
-// ---------------------------------------------------------------------------
+/* Global Export -- used by main.js to check if tour is active */
 
-/**
- * Expose a getter so main.js can check tour state via window.tourActive().
- * @returns {boolean} Whether the tour is currently running.
- */
+/** Expose a getter so main.js can check tour state via window.tourActive(). */
 window.tourActive = () => tourActive;

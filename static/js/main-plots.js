@@ -1,37 +1,9 @@
-/*
- * ============================================================================
- * main-plots.js — Plot Creation, Band Management & Click Handlers
- * ============================================================================
- *
- * Plotly plot lifecycle (create, reset, resize), spectral band filtering
- * (collect, render, toggle, apply), color-scale picker, custom-band DOM
- * management, and plot-click-to-spectrum wiring.
- *
- * Requires:  main-state.js (activeBands, plotOriginal, spectrumMode,
- *            currentSpectrumData, currentWavelengthIndex, colorScales)
- *
- * Called by:  main-upload.js  (createPlot, renderBandButtons, setActiveBand)
- *            main-spectrum.js (computeLockedRibbonRange, getEligibleWavelengthIndices)
- *
- * Calls at runtime:
- *            main-spectrum.js (updateSpectrumPlot, showSpectrumAtTime)
- *
- * Load order:
- *   main-state.js → main-plots.js → main-spectrum.js
- *                → main-upload.js → main-export.js
- * ============================================================================
- */
+// main-plots.js - Plot Creation, Band Management & Click Handlers
 
-// ---------------------------------------------------------------------------
 // Band Collection & State
-// ---------------------------------------------------------------------------
 
 /**
  * Gather all custom spectral bands from the DOM input rows.
- *
- * Each band row has three inputs: name, start wavelength, end wavelength.
- * Invalid or incomplete rows are filtered out.
- *
  * @returns {Array<{id:string, name:string, start:number, end:number}>}
  */
 function collectBands() {
@@ -46,8 +18,7 @@ function collectBands() {
 }
 
 /**
- * Update the visual state (ring highlight) of all band buttons across the
- * surface, heatmap, and spectrum button groups.
+ * Update the visual state (ring highlight) of all band buttons.
  */
 function updateBandButtonStates() {
   const activeIds = activeBands.map(b => b.id);
@@ -62,9 +33,7 @@ function updateBandButtonStates() {
 }
 
 /**
- * Render band-selection buttons into the surface, heatmap, and spectrum
- * button containers. Creates a "Full Spectrum" button plus one button per
- * valid custom band.
+ * Render band-selection buttons into the surface, heatmap, and spectrum containers.
  */
 function renderBandButtons() {
   const bands = collectBands();
@@ -91,11 +60,8 @@ function renderBandButtons() {
 }
 
 /**
- * Toggle a band on or off in the active set, then re-filter all plots
- * and update the spectrum viewer.
- *
- * @param {Object|null} band - Band to toggle, or null to clear all bands
- *                             (show full spectrum).
+ * Toggle a band on or off, then re-filter all plots and update the spectrum.
+ * @param {Object|null} band - Band to toggle, or null to clear all.
  */
 function setActiveBand(band) {
   if (band === null) {
@@ -125,25 +91,20 @@ function setActiveBand(band) {
   updateBandButtonStates();
 }
 
-// ---------------------------------------------------------------------------
 // Band Filtering on Surface / Heatmap
-// ---------------------------------------------------------------------------
 
 /**
- * Filter a surface or heatmap plot to show only wavelengths within the
- * selected bands. Out-of-band data is rendered as a transparent gray layer.
- *
- * If no bands are active, restores the original (unfiltered) plot data.
- *
- * @param {string} plotId - DOM id of the Plotly div ('surfacePlot' or 'heatmapPlot').
- * @param {Array}  bands  - Currently active bands (may be empty).
+ * Filter a plot to show only wavelengths within selected bands.
+ * Out-of-band data is rendered as a transparent layer.
+ * @param {string} plotId - 'surfacePlot' or 'heatmapPlot'.
+ * @param {Array} bands - Currently active bands (may be empty).
  */
 function applyBandToPlot(plotId, bands) {
   const div = document.getElementById(plotId);
   if (!div || !div.data) return;
   if (!plotOriginal[plotId]) plotOriginal[plotId] = JSON.parse(JSON.stringify(div.data));
 
-  // No bands → restore original
+  // No bands: restore original
   if (!bands || bands.length === 0) {
     Plotly.react(div, plotOriginal[plotId], div.layout);
     setupPlotClickHandler(div);
@@ -164,7 +125,6 @@ function applyBandToPlot(plotId, bands) {
 
       // Split Z data into in-band and out-of-band matrices
       if (z.length === yvec.length) {
-        // Rows indexed by wavelength
         for (let i = 0; i < z.length; i++) {
           const inBand = bands.some(b => yvec[i] >= b.start && yvec[i] <= b.end);
           const row = z[i];
@@ -172,7 +132,6 @@ function applyBandToPlot(plotId, bands) {
           outZ[i] = inBand ? new Array(row.length).fill(NaN) : row.slice();
         }
       } else if (z[0] && z[0].length === yvec.length) {
-        // Columns indexed by wavelength
         for (let i = 0; i < z.length; i++) {
           inZ[i] = [];
           outZ[i] = [];
@@ -191,11 +150,9 @@ function applyBandToPlot(plotId, bands) {
       const base = {};
       for (const k in trace) if (k !== 'z') base[k] = trace[k];
       if (isHeatmap) {
-        // Heatmap ghost: light grey at full opacity so it looks like faded data
         newData.push({ ...base, z: outZ, showscale: false, colorscale: [[0,'#2a2a2e'],[1,'#3a3a40']], hoverinfo: 'skip', hoverongaps: false });
         newData.push({ ...base, z: inZ, hoverongaps: false });
       } else {
-        // Surface ghost: white at low opacity
         newData.push({ ...base, z: outZ, showscale: false, opacity: 0.08, colorscale: [[0,'#fff'],[1,'#fff']], hoverongaps: false });
         newData.push({ ...base, z: inZ, hoverongaps: false });
       }
@@ -207,22 +164,15 @@ function applyBandToPlot(plotId, bands) {
   setupPlotClickHandler(div);
 }
 
-// ---------------------------------------------------------------------------
 // Plot Creation & Reset
-// ---------------------------------------------------------------------------
 
 /**
- * Create a Plotly plot with standardized config, aspect ratio, tick
- * formatting, and colorbar positioning.
- *
- * Also caches the original data in `plotOriginal` for band filtering,
- * stores the initial 3-D camera for reset, and attaches the click handler.
- *
- * @param {string} plotId  - DOM id of the target div.
- * @param {Array}  data    - Plotly trace data array.
- * @param {Object} layout  - Plotly layout object.
- * @param {Object} config  - Plotly config object (will be enhanced).
- * @returns {Promise} Resolves when the plot is fully rendered.
+ * Create a Plotly plot with standardized config, aspect ratio, and colorbar positioning.
+ * @param {string} plotId - DOM id of the target div.
+ * @param {Array} data - Plotly trace data array.
+ * @param {Object} layout - Plotly layout object.
+ * @param {Object} config - Plotly config object (will be enhanced).
+ * @returns {Promise}
  */
 function createPlot(plotId, data, layout, config) {
   const div = document.getElementById(plotId);
@@ -249,7 +199,6 @@ function createPlot(plotId, data, layout, config) {
       div._initialCamera = JSON.parse(JSON.stringify(cam));
     }
 
-    // Enable click-to-slice on the main plots
     if (plotId === 'surfacePlot' || plotId === 'heatmapPlot') {
       setupPlotClickHandler(div);
     }
@@ -258,7 +207,7 @@ function createPlot(plotId, data, layout, config) {
     const mbc = div.querySelector('.modebar-container');
     if (mbc) { mbc.style.left = ''; mbc.style.right = '0px'; }
 
-    // --- Detect variability vs flux for tick formatting ---
+    // Detect variability vs flux for tick formatting
     let titleText = '';
     try {
       const t0 = Array.isArray(div.data) && div.data.length ? div.data[0] : null;
@@ -284,13 +233,13 @@ function createPlot(plotId, data, layout, config) {
       }
     }
 
-    // --- Set a stable height ---
+    // Set a stable height
     const desiredHeight = plotId === 'spectrumPlot' ? 480 : 640;
     div.style.aspectRatio = '';
     div.style.height = desiredHeight + 'px';
     Plotly.relayout(div, { height: desiredHeight });
 
-    // --- Heatmap: auto-range the Y axis to data bounds ---
+    // Heatmap: auto-range the Y axis to data bounds
     if (plotId === 'heatmapPlot') {
       try {
         let ys = [];
@@ -319,9 +268,6 @@ function createPlot(plotId, data, layout, config) {
 
 /**
  * Reset a plot's view to its initial state.
- * For the surface plot, restores the original 3-D camera angle.
- * For the heatmap, resets both axes to autorange.
- *
  * @param {string} plotId - 'surfacePlot' or 'heatmapPlot'.
  */
 function resetPlotView(plotId) {
@@ -335,13 +281,10 @@ function resetPlotView(plotId) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Spectrum Plot Helpers (bands overlay, error bars, ribbon range)
-// ---------------------------------------------------------------------------
+// Spectrum Plot Helpers
 
 /**
- * Overlay translucent yellow rectangles on the spectrum plot for each
- * custom band, so the user can see band boundaries visually.
+ * Overlay translucent rectangles on the spectrum plot for each custom band.
  */
 function addCustomBandsToSpectrumPlot() {
   const spectrumPlotDiv = document.getElementById('spectrumPlot');
@@ -372,8 +315,7 @@ function addCustomBandsToSpectrumPlot() {
 }
 
 /**
- * Handle the error-bars checkbox toggle. Recomputes the locked ribbon
- * range if errors are being shown, then re-renders the spectrum.
+ * Handle the error-bars checkbox toggle.
  */
 function onToggleErrorBars() {
   const teb = document.getElementById('toggleErrorBars');
@@ -385,15 +327,9 @@ function onToggleErrorBars() {
 }
 
 /**
- * Calculate the Y-axis min/max that encompasses the full error-bar
- * envelope across all time points, so the Y-range stays stable during
- * animation.
- *
- * Handles two cases:
- *   1. Band-averaged mode: computes averaged flux ± propagated error per band.
- *   2. Full spectrum mode: scans every (wavelength, time) cell.
- *
- * @param {Object}     spec  - The currentSpectrumData object.
+ * Calculate Y-axis min/max encompassing the full error-bar envelope
+ * across all time points, so Y-range stays stable during animation.
+ * @param {Object} spec - The currentSpectrumData object.
  * @param {Array|null} bands - Unused (kept for API compatibility).
  * @returns {[number, number]|null} [yMin, yMax] with 3% padding, or null.
  */
@@ -404,7 +340,7 @@ function computeLockedRibbonRange(spec, bands) {
   const ref = spec.referenceSpectrum || null;
   if (!Z.length || !E.length) return null;
 
-  // --- Case 1: Band-averaged mode ---
+  // Band-averaged mode
   if (spec.bandAveraged && activeBands && activeBands.length >= 1) {
     let minV = Infinity, maxV = -Infinity;
     const timeArray = spec.timeData || [];
@@ -444,7 +380,7 @@ function computeLockedRibbonRange(spec, bands) {
     return [minV - pad, maxV + pad];
   }
 
-  // --- Case 2: Full spectrum mode ---
+  // Full spectrum mode
   let minV = Infinity, maxV = -Infinity;
   for (let i = 0; i < wl.length; i++) {
     for (let j = 0; j < spec.timeData.length; j++) {
@@ -463,16 +399,12 @@ function computeLockedRibbonRange(spec, bands) {
   return [minV - pad, maxV + pad];
 }
 
-// ---------------------------------------------------------------------------
 // Wavelength Index Filtering & Spectrum Mode Toggle
-// ---------------------------------------------------------------------------
 
 /**
- * Return the indices of wavelengths that fall within any active band.
- * If no bands are active, returns all indices.
- *
- * @param {number[]} wavelengths - The wavelength array.
- * @returns {number[]} Array of valid indices.
+ * Return indices of wavelengths within any active band. If none active, returns all.
+ * @param {number[]} wavelengths
+ * @returns {number[]}
  */
 function getEligibleWavelengthIndices(wavelengths) {
   if (!activeBands || activeBands.length === 0) return wavelengths.map((_, i) => i);
@@ -486,7 +418,6 @@ function getEligibleWavelengthIndices(wavelengths) {
 
 /**
  * Switch the spectrum X-axis between wavelength and time.
- * Updates the toggle button text and re-renders the spectrum.
  */
 function toggleSpectrumMode() {
   spectrumMode = (spectrumMode === 'vs_wavelength') ? 'vs_time' : 'vs_wavelength';
@@ -506,13 +437,10 @@ function toggleSpectrumMode() {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Color Scale Picker
-// ---------------------------------------------------------------------------
 
 /**
- * Create DOM elements for each color-scale option and insert them into
- * the #colorscaleSelector container. Selects the first option by default.
+ * Create DOM elements for each color-scale option. Selects the first by default.
  */
 function initializeColorScales() {
   const container = document.getElementById('colorscaleSelector');
@@ -529,8 +457,7 @@ function initializeColorScales() {
 
 /**
  * Highlight the selected color-scale option and deselect all others.
- *
- * @param {HTMLElement} selectedOption - The clicked option element.
+ * @param {HTMLElement} selectedOption
  */
 function selectColorScale(selectedOption) {
   document.querySelectorAll('.colorscale-option').forEach(option => {
@@ -539,18 +466,13 @@ function selectColorScale(selectedOption) {
   selectedOption.classList.add('selected');
 }
 
-// ---------------------------------------------------------------------------
 // Custom Band DOM Management
-// ---------------------------------------------------------------------------
 
 /**
- * Add a new custom-band input row to the #customBands container.
- * Each row has name, start wavelength, and end wavelength fields plus
- * a "Remove" button.
- *
- * @param {string}       name  - Pre-filled band name (default '').
- * @param {string|number} start - Pre-filled start wavelength (default '').
- * @param {string|number} end   - Pre-filled end wavelength (default '').
+ * Add a new custom-band input row to #customBands.
+ * @param {string} name
+ * @param {string|number} start
+ * @param {string|number} end
  */
 function addCustomBand(name = '', start = '', end = '') {
   const bandContainer = document.createElement('div');
@@ -575,16 +497,11 @@ function addCustomBand(name = '', start = '', end = '') {
   renderBandButtons();
 }
 
-// ---------------------------------------------------------------------------
 // Plot Click Handler
-// ---------------------------------------------------------------------------
 
 /**
- * Attach a Plotly click listener to a plot div. When the user clicks on
- * the surface or heatmap (and the corresponding checkbox is enabled),
- * extracts a spectrum at the clicked point.
- *
- * @param {HTMLElement} plotDiv - The Plotly div element.
+ * Attach a Plotly click listener to extract a spectrum at the clicked point.
+ * @param {HTMLElement} plotDiv
  */
 function setupPlotClickHandler(plotDiv) {
   plotDiv.removeAllListeners('plotly_click');

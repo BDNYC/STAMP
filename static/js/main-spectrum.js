@@ -1,53 +1,19 @@
-/*
- * ============================================================================
- * main-spectrum.js — Spectrum Viewer (Display, Animation & Navigation)
- * ============================================================================
- *
- * The spectrum viewer subsystem. Handles extracting a 1-D slice from the
- * surface/heatmap data cube, rendering it as a Plotly line chart with
- * optional error ribbons, animating through time or wavelength indices,
- * and prev/next navigation.
- *
- * Requires:
- *   main-state.js   (all shared state variables)
- *   main-plots.js   (getEligibleWavelengthIndices, computeLockedRibbonRange,
- *                    addCustomBandsToSpectrumPlot)
- *
- * Called by:
- *   main-plots.js   (setupPlotClickHandler → showSpectrumAtTime,
- *                    setActiveBand/toggleSpectrumMode/onToggleErrorBars → updateSpectrumPlot)
- *   main-export.js  (captureSpectrumFrames → updateSpectrumPlot,
- *                    ensureSpectrumInitialized, nextAnimationFrame)
- *
- * Load order:
- *   main-state.js → main-plots.js → main-spectrum.js
- *                → main-upload.js → main-export.js
- * ============================================================================
- */
+// main-spectrum.js - Spectrum Viewer (Display, Animation & Navigation)
 
-// ---------------------------------------------------------------------------
 // Animation Controls
-// ---------------------------------------------------------------------------
 
 /**
- * Toggle spectrum animation play/pause.
- *
- * When playing, advances the time (or wavelength) index at the configured
- * speed and re-renders the spectrum on each tick. Disables prev/next
- * buttons during playback.
- *
- * Animation is blocked when in vs_time mode with active bands (the entire
- * band-averaged series is already visible).
+ * Toggle spectrum animation play/pause. Advances the time or wavelength
+ * index at the configured speed. Blocked in vs_time mode with active bands.
  */
 function toggleAnimation() {
   if (spectrumMode === 'vs_time' && activeBands.length > 0) {
     return;
   }
   if (isAnimating) {
-    // --- Pause ---
     clearInterval(animationInterval);
     isAnimating = false;
-    document.getElementById('playAnimationBtn').innerHTML = '▶ Play';
+    document.getElementById('playAnimationBtn').innerHTML = 'Play';
     if (spectrumMode === 'vs_wavelength') {
       document.getElementById('prevSpectrumBtn').disabled = currentTimeIndex <= 0;
       document.getElementById('nextSpectrumBtn').disabled = currentTimeIndex >= totalTimePoints - 1;
@@ -56,9 +22,8 @@ function toggleAnimation() {
       document.getElementById('nextSpectrumBtn').disabled = currentWavelengthIndex >= totalWavelengthPoints - 1;
     }
   } else {
-    // --- Play ---
     isAnimating = true;
-    document.getElementById('playAnimationBtn').innerHTML = '⏸ Pause';
+    document.getElementById('playAnimationBtn').innerHTML = 'Pause';
     document.getElementById('prevSpectrumBtn').disabled = true;
     document.getElementById('nextSpectrumBtn').disabled = true;
     const intervalMs = 1000 / animationSpeed;
@@ -80,9 +45,8 @@ function toggleAnimation() {
 }
 
 /**
- * Update the animation speed and restart playback if already running.
- *
- * @param {string|number} newSpeed - New speed in frames per second.
+ * Update animation speed and restart playback if already running.
+ * @param {string|number} newSpeed - Frames per second.
  */
 function updateAnimationSpeed(newSpeed) {
   animationSpeed = parseInt(newSpeed);
@@ -94,25 +58,13 @@ function updateAnimationSpeed(newSpeed) {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Spectrum Data Extraction
-// ---------------------------------------------------------------------------
 
 /**
  * Extract spectrum data at a clicked point on the surface or heatmap,
  * then open the spectrum viewer.
- *
- * This function:
- *   1. Locates the relevant trace(s) in the plot data.
- *   2. Accumulates data across multi-visit surface traces.
- *   3. Applies user-specified wavelength/time range filters.
- *   4. Finds the clicked time/wavelength index.
- *   5. Computes global min/max for Y-axis scaling.
- *   6. Assembles the currentSpectrumData object.
- *   7. Opens the spectrum container and renders the plot.
- *
- * @param {Object}      clickData - Plotly click event data with .x and .y.
- * @param {HTMLElement}  plotDiv   - The Plotly div that was clicked.
+ * @param {Object} clickData - Plotly click event data with .x and .y.
+ * @param {HTMLElement} plotDiv - The Plotly div that was clicked.
  */
 function showSpectrumAtTime(clickData, plotDiv) {
 
@@ -120,7 +72,7 @@ function showSpectrumAtTime(clickData, plotDiv) {
   const live = (plotDiv && (plotDiv._fullData || plotDiv.data)) ? (plotDiv._fullData || plotDiv.data) : [];
   let plotData = cached || live;
 
-  // --- 1. Locate relevant traces ---
+  // 1. Locate relevant traces
   let mainTrace = null;
   let allVisitTraces = [];
 
@@ -139,7 +91,7 @@ function showSpectrumAtTime(clickData, plotDiv) {
     }
   }
 
-  // --- 2. Accumulate multi-visit surface data ---
+  // 2. Accumulate multi-visit surface data
   if (plotDiv.id === 'surfacePlot' && allVisitTraces.length > 0) {
     const firstTrace = allVisitTraces[0].trace;
     let wavelengthData = firstTrace.y;
@@ -223,7 +175,7 @@ function showSpectrumAtTime(clickData, plotDiv) {
     if (Array.isArray(timeData[0])) timeData = timeData[0];
   }
 
-  // --- 3. Apply user-specified range filters ---
+  // 3. Apply user-specified range filters
   let wlIndicesUsed = null;
   const ranges = window.__userRanges || {};
 
@@ -265,7 +217,7 @@ function showSpectrumAtTime(clickData, plotDiv) {
     }
   }
 
-  // --- 4. Find the clicked time/wavelength index ---
+  // 4. Find the clicked time/wavelength index
   let timeIndex = 0;
   let minDiff = Infinity;
   for (let i = 0; i < timeData.length; i++) {
@@ -291,7 +243,7 @@ function showSpectrumAtTime(clickData, plotDiv) {
   const eligible = getEligibleWavelengthIndices(wavelengthData);
   if (eligible.length && !eligible.includes(currentWavelengthIndex)) currentWavelengthIndex = eligible[0];
 
-  // --- 5. Compute global min/max for Y-axis scaling ---
+  // 5. Compute global min/max for Y-axis scaling
   let globalMin = Infinity;
   let globalMax = -Infinity;
   for (let i = 0; i < fluxData.length; i++) {
@@ -313,7 +265,7 @@ function showSpectrumAtTime(clickData, plotDiv) {
     refSpec = wlIndicesUsed.map(i => refSpec[i]);
   }
 
-  // --- 6. Assemble spectrum data object ---
+  // 6. Assemble spectrum data object
   currentSpectrumData = {
     wavelengthData,
     timeData,
@@ -331,39 +283,18 @@ function showSpectrumAtTime(clickData, plotDiv) {
 
   currentSpectrumData.lockedRibbonRange = computeLockedRibbonRange(currentSpectrumData, null);
 
-  // --- 7. Open viewer and render ---
+  // 7. Open viewer and render
   document.getElementById('spectrumContainer').classList.remove('hidden');
   updateSpectrumPlot();
   document.getElementById('spectrumContainer').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-// ---------------------------------------------------------------------------
 // Spectrum Plot Rendering
-// ---------------------------------------------------------------------------
 
 /**
- * Render the spectrum plot based on the current mode and data.
- *
- * This is the largest function in the codebase. It handles four distinct
- * rendering branches depending on the combination of spectrum mode and
- * band selection:
- *
- *   Branch 1: vs_wavelength + bands active
- *     → Gray base line + colored in-band line + segmented error ribbons
- *
- *   Branch 2: vs_wavelength + no bands
- *     → Single blue line + optional full error ribbon
- *
- *   Branch 3: vs_time + bands active
- *     → Multi-band averaged time series with per-band colors,
- *       gap-aware segmentation, and per-segment error ribbons
- *
- *   Branch 4: vs_time + no bands
- *     → Single wavelength time series with gap-aware segmentation
- *       and optional error ribbon
- *
- * After rendering, updates the title, info text, and navigation button
- * enabled/disabled states.
+ * Render the spectrum plot based on the current mode, band selection,
+ * and error bar settings. Handles four rendering branches:
+ * vs_wavelength +/- bands, vs_time +/- bands.
  */
 function updateSpectrumPlot() {
   if (!currentSpectrumData) { return; }
@@ -374,7 +305,7 @@ function updateSpectrumPlot() {
 
   let values = [];
   let errors = [];
-  let xAxisTitle = 'Wavelength (µm)';
+  let xAxisTitle = 'Wavelength (um)';
   let xValues = wavelengths;
   let infoPrimary = '';
   let infoIndex = 0;
@@ -382,14 +313,14 @@ function updateSpectrumPlot() {
 
   currentSpectrumData.bandAveraged = false;
 
-  // ---- Extract the 1-D slice based on current mode ----
+  // Extract the 1-D slice based on current mode
   if (spectrumMode === 'vs_wavelength') {
     const currentTime = currentSpectrumData.timeData[currentTimeIndex];
     for (let i = 0; i < wavelengths.length; i++) {
       values.push((fluxData[i] && fluxData[i][currentTimeIndex] !== undefined) ? fluxData[i][currentTimeIndex] : NaN);
       errors.push((errData && errData[i] && errData[i][currentTimeIndex] !== undefined) ? errData[i][currentTimeIndex] :  NaN);
     }
-    xAxisTitle = 'Wavelength (µm)';
+    xAxisTitle = 'Wavelength (um)';
     xValues = wavelengths;
     infoPrimary = `Spectrum at Time:  ${currentTime.toFixed(2)} hours`;
     infoIndex = currentTimeIndex + 1;
@@ -397,10 +328,10 @@ function updateSpectrumPlot() {
   } else {
     const timeArray = currentSpectrumData.timeData || [];
     if (activeBands && activeBands.length >= 1) {
-      // Band-averaged time series (values computed per-band below)
+      // Band-averaged time series
       xAxisTitle = 'Time (hours)';
       xValues = timeArray;
-      infoPrimary = activeBands.length === 1 ? `Band-integrated series: ${activeBands[0].name} (${activeBands[0].start.toFixed(2)}–${activeBands[0].end.toFixed(2)} µm)` : `Band-integrated series (${activeBands.length} bands)`;
+      infoPrimary = activeBands.length === 1 ? `Band-integrated series: ${activeBands[0].name} (${activeBands[0].start.toFixed(2)}-${activeBands[0].end.toFixed(2)} um)` : `Band-integrated series (${activeBands.length} bands)`;
       infoIndex = 1;
       infoTotal = 1;
       currentSpectrumData.bandAveraged = true;
@@ -413,7 +344,7 @@ function updateSpectrumPlot() {
       }
       xAxisTitle = 'Time (hours)';
       xValues = timeArray;
-      infoPrimary = `Series at Wavelength: ${wavelengths[wlIdx].toFixed(4)} µm`;
+      infoPrimary = `Series at Wavelength: ${wavelengths[wlIdx].toFixed(4)} um`;
       infoIndex = wlIdx + 1;
       infoTotal = totalWavelengthPoints;
     }
@@ -425,7 +356,7 @@ function updateSpectrumPlot() {
     if (validValues.length === 0) { return; }
   }
 
-  // ---- Y-axis label and formatting ----
+  // Y-axis label and formatting
   let yAxisLabel, hoverFormat, yTickFormat;
   if (currentSpectrumData.zAxisDisplay === 'flux') {
     yAxisLabel = 'Flux';
@@ -466,9 +397,7 @@ function updateSpectrumPlot() {
     return errsArr;
   }
 
-  // ===========================================================================
   // Branch 1: vs_wavelength + bands active
-  // ===========================================================================
   if (spectrumMode === 'vs_wavelength') {
     if (activeBands && activeBands.length > 0) {
       const inMask = xValues.map((w) => activeBands.some(b => w >= b.start && w <= b.end));
@@ -494,7 +423,7 @@ function updateSpectrumPlot() {
         mode: 'lines',
         line: { color: '#3B82F6', width: 2 },
         name: 'In',
-        hovertemplate: `Wavelength: %{x:.4f} µm<br>${yAxisLabel}: %{y: ${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ? ' %' : ''}<extra></extra>`
+        hovertemplate: `Wavelength: %{x:.4f} um<br>${yAxisLabel}: %{y: ${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ? ' %' : ''}<extra></extra>`
       };
 
       const traces = [baseTrace, spectrumIn];
@@ -527,9 +456,7 @@ function updateSpectrumPlot() {
 
       Plotly.newPlot('spectrumPlot', traces, layout, { responsive: true });
 
-    // =========================================================================
     // Branch 2: vs_wavelength + no bands
-    // =========================================================================
     } else {
       const spectrumTrace = {
         x: xValues,
@@ -538,7 +465,7 @@ function updateSpectrumPlot() {
         mode: 'lines',
         line: { color: '#3B82F6', width: 2 },
         name: 'Spectrum',
-        hovertemplate: `Wavelength: %{x:.4f} µm<br>${yAxisLabel}: %{y:${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ? ' %' : ''}<extra></extra>`
+        hovertemplate: `Wavelength: %{x:.4f} um<br>${yAxisLabel}: %{y:${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ? ' %' : ''}<extra></extra>`
       };
 
       const traces = [spectrumTrace];
@@ -555,16 +482,14 @@ function updateSpectrumPlot() {
       Plotly.newPlot('spectrumPlot', traces, layout, { responsive: true });
     }
 
-  // ===========================================================================
   // Branch 3: vs_time + bands active (band-averaged time series)
-  // ===========================================================================
   } else {
     if (activeBands && activeBands.length >= 1) {
       const timeArray = xValues;
       const traces = [];
       const gapThresholdHours = 0.5;
 
-      // Detect visit gaps for segmented rendering (non-interpolated data)
+      // Detect visit gaps for segmented rendering
       const segs = [];
       if (! currentSpectrumData.useInterpolation) {
         let s = 0;
@@ -753,9 +678,7 @@ function updateSpectrumPlot() {
       layout.showlegend = activeBands.length > 1;
       Plotly.newPlot('spectrumPlot', traces, layout, { responsive: true });
 
-    // =========================================================================
     // Branch 4: vs_time + no bands (single wavelength time series)
-    // =========================================================================
     } else {
       const traces = [];
       const gapThresholdHours = 0.5;
@@ -826,7 +749,7 @@ function updateSpectrumPlot() {
     }
   }
 
-  // ---- Update info text ----
+  // Update info text
   const titleEl = document.getElementById('spectrumTitle');
   if (titleEl) titleEl.textContent = infoPrimary;
   const infoEl = document.getElementById('spectrumInfo');
@@ -838,7 +761,7 @@ function updateSpectrumPlot() {
     }
   }
 
-  // ---- Update navigation button states ----
+  // Update navigation button states
   if (spectrumMode === 'vs_time' && activeBands.length > 0) {
     document.getElementById('prevSpectrumBtn').disabled = true;
     document.getElementById('nextSpectrumBtn').disabled = true;
@@ -854,15 +777,11 @@ function updateSpectrumPlot() {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Spectrum Navigation
-// ---------------------------------------------------------------------------
 
 /**
- * Step through time or wavelength indices by the given increment.
- * Respects band-eligible indices when navigating in vs_time mode.
- *
- * @param {number} step - Direction to move: +1 for next, -1 for previous.
+ * Step through time or wavelength indices. Respects band-eligible indices.
+ * @param {number} step - +1 for next, -1 for previous.
  */
 function navigateSpectrum(step) {
   if (!currentSpectrumData) return;
@@ -892,7 +811,6 @@ function navigateSpectrum(step) {
 
 /**
  * Close the spectrum viewer panel and reset its state.
- * Stops any running animation first.
  */
 function closeSpectrumViewer() {
   if (isAnimating) {
@@ -902,14 +820,10 @@ function closeSpectrumViewer() {
   currentSpectrumData = null;
 }
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Return a Promise that resolves after the next animation frame.
- * Used to yield to the browser's render pipeline between frame captures.
- *
  * @returns {Promise<void>}
  */
 function nextAnimationFrame() {
@@ -917,10 +831,8 @@ function nextAnimationFrame() {
 }
 
 /**
- * Ensure spectrum data is initialized before operations that depend on it
- * (e.g. video frame capture). If no spectrum is currently loaded, extracts
- * one from the first time point of whichever plot is available.
- *
+ * Ensure spectrum data is initialized before operations that depend on it.
+ * If none loaded, extracts one from the first time point of the available plot.
  * @returns {Promise<void>}
  * @throws {Error} If no plots are ready yet.
  */

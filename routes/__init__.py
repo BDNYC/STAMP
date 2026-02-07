@@ -1,12 +1,5 @@
 """
-routes/
-Flask Blueprint registration for SA3D (STAMP).
-
-Each sub-module defines a Blueprint containing related route handlers:
-
-- **main** — Index page, static plot serving, video-token hook.
-- **upload** — Synchronous file upload, spectrum-frame video, plot download.
-- **jobs** — Asynchronous background processing, progress, and results.
+Flask Blueprint registration for STAMP.
 """
 
 from routes.main import main_bp

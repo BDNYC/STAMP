@@ -1,40 +1,9 @@
-/*
- * ============================================================================
- * main-upload.js — Upload Pipeline, Progress Bar & Metadata Display
- * ============================================================================
- *
- * Handles the entire MAST file upload workflow: form submission, async job
- * polling with progress updates, result fetching, and plot rendering.
- * Also includes sidebar positioning, metadata display, and progress-bar
- * DOM management.
- *
- * Requires:
- *   main-state.js   (__currentJobId, __progressTimer, activeBands,
- *                    plotOriginal)
- *   main-plots.js   (createPlot, renderBandButtons, setActiveBand)
- *
- * Sets:
- *   window.stampsDataLoaded  — read by tour-core.js to detect when plots
- *                              are ready
- * Reads:
- *   window.tourActive()      — defined in tour-core.js; suppresses
- *                              auto-scroll when the tour is active
- *
- * Load order:
- *   main-state.js → main-plots.js → main-spectrum.js
- *                → main-upload.js → main-export.js
- * ============================================================================
- */
+// main-upload.js - Upload Pipeline, Progress Bar & Metadata Display
 
-// ---------------------------------------------------------------------------
 // Data Requirements Sidebar Positioning
-// ---------------------------------------------------------------------------
 
 /**
- * Position the #dataRequirementsContainer absolutely to the left of the
- * main content column. Detaches the element from its original parent on
- * first call so it doesn't affect centering, then uses absolute document
- * coordinates so it doesn't follow scroll.
+ * Position #dataRequirementsContainer absolutely to the left of the main content column.
  */
 function positionDataRequirements() {
   const container = document.getElementById('dataRequirementsContainer');
@@ -75,33 +44,18 @@ function positionDataRequirements() {
 }
 
 /**
- * Initialize sidebar positioning once the DOM is ready and re-run on
- * window resize.
+ * Initialize sidebar positioning and re-run on resize.
  */
 window.addEventListener('DOMContentLoaded', () => {
   setTimeout(positionDataRequirements, 0);
   window.addEventListener('resize', positionDataRequirements);
 });
 
-// ---------------------------------------------------------------------------
 // Metadata Display
-// ---------------------------------------------------------------------------
 
 /**
- * Render dataset metadata (integrations, wavelength/time range,
- * instruments, filters, gratings) into the #metadataInfo container.
- *
+ * Render dataset metadata into the #metadataInfo container.
  * @param {Object} metadata - Metadata object returned by the backend.
- * @param {number} metadata.total_integrations
- * @param {number} metadata.files_processed
- * @param {string} metadata.wavelength_range
- * @param {string} metadata.time_range
- * @param {string[]} [metadata.targets]
- * @param {number}   [metadata.plotted_integrations]
- * @param {string}   [metadata.user_ranges]
- * @param {string[]} [metadata.instruments]
- * @param {string[]} [metadata.filters]
- * @param {string[]} [metadata.gratings]
  */
 function displayMetadata(metadata) {
   const metadataDiv = document.getElementById('metadataInfo');
@@ -136,14 +90,14 @@ function displayMetadata(metadata) {
   if (metadata.plotted_integrations && metadata.plotted_integrations < metadata.total_integrations) {
     metadataHTML += `
       <div class="col-span-2 border-t border-gray-600 pt-2 mt-2">
-        <p class="text-sm text-yellow-400"> Showing ${metadata.plotted_integrations} of ${metadata.total_integrations} integrations (evenly sampled)</p>
+        <p class="text-sm text-yellow-400">Showing ${metadata.plotted_integrations} of ${metadata.total_integrations} integrations (evenly sampled)</p>
       </div>
     `;
   }
   if (metadata.user_ranges) {
     metadataHTML += `
       <div class="col-span-2 border-t border-gray-600 pt-2 mt-2">
-        <p class="text-sm text-blue-400"> User-specified ranges applied:</p>
+        <p class="text-sm text-blue-400">User-specified ranges applied:</p>
         <p class="text-sm text-gray-300">${metadata.user_ranges}</p>
       </div>
     `;
@@ -177,20 +131,17 @@ function displayMetadata(metadata) {
   metadataDiv.classList.remove('hidden');
 }
 
-// ---------------------------------------------------------------------------
 // Progress Bar
-// ---------------------------------------------------------------------------
 
 /**
- * Create (or show) the progress bar UI beneath the upload button.
- *
- * @param {string} message - Initial status message (e.g. 'Queued...').
+ * Show the progress bar UI beneath the upload button.
+ * @param {string} message - Initial status message.
  */
 function showProgress(message) {
   const wrap = document.getElementById('progressWrap');
   if (!wrap) return;
   const msg = wrap.querySelector('#progressMsg');
-  if (msg) msg.textContent = message || 'Queued…';
+  if (msg) msg.textContent = message || 'Queued...';
   const inner = wrap.querySelector('#progressInner');
   if (inner) inner.style.width = '0%';
   const pct = wrap.querySelector('#progressPct');
@@ -202,10 +153,9 @@ function showProgress(message) {
 
 /**
  * Update the progress bar width, message, and stats text.
- *
- * @param {number}      pct       - Progress percentage (0–100).
- * @param {string|null} message   - Status message to display.
- * @param {string}      statsText - Additional stats line (throughput, ETA).
+ * @param {number} pct - Progress percentage (0-100).
+ * @param {string|null} message - Status message.
+ * @param {string} statsText - Additional stats line (throughput, ETA).
  */
 function updateProgress(pct, message, statsText) {
   const wrap = document.getElementById('progressWrap');
@@ -230,27 +180,17 @@ function hideProgress() {
 }
 
 
-// ---------------------------------------------------------------------------
 // Upload Pipeline
-// ---------------------------------------------------------------------------
 
 /**
- * Main upload workflow. Orchestrates the entire data-processing pipeline:
- *
- *   1. Collect form data (file, colorscale, ranges, bands, options).
- *   2. POST to /start_mast to kick off the async backend job.
- *   3. Poll /progress/{jobId} every 200 ms, updating the progress bar.
- *   4. Once done, GET /results/{jobId} for plot JSON and metadata.
- *   5. Render the surface and heatmap plots.
- *   6. Signal to the tour that plots are loaded.
- *   7. Render band buttons and restore the default (full spectrum) view.
- *
+ * Main upload workflow. Collects form data, starts the async backend job,
+ * polls progress, fetches results, and renders plots.
  * @returns {Promise<void>}
  */
 async function uploadMastDirectory() {
   const formData = new FormData();
 
-  // --- 1. Collect form data ---
+  // 1. Collect form data
 
   // File selection
   if (window.isDemoDataSelected) {
@@ -314,20 +254,20 @@ async function uploadMastDirectory() {
   const originalText = uploadBtn.textContent;
   uploadBtn.textContent = 'Processing...';
   uploadBtn.disabled = true;
-  showProgress('Queued…');
+  showProgress('Queued...');
   if (!window.tourActive || typeof window.tourActive !== 'function' || !window.tourActive()) {
     document.getElementById('progressWrap').scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
   try {
-    // --- 2. Start the async backend job ---
+    // 2. Start the async backend job
     const startRes = await fetch('/start_mast', { method: 'POST', body:  formData });
     if (!startRes.ok) { const t = await startRes.text(); throw new Error(`HTTP ${startRes.status}: ${t}`); }
     const startData = await startRes.json();
     if (!startData.job_id) throw new Error('No job id returned');
     __currentJobId = startData.job_id;
 
-    // --- 3. Poll progress ---
+    // 3. Poll progress
     await new Promise((resolve, reject) => {
       const poll = async () => {
         try {
@@ -340,13 +280,13 @@ async function uploadMastDirectory() {
           const tot = typeof p.total_integrations === 'number' ? p.total_integrations : null;
           const baseMsg = p.message || '';
           const isCacheHit = baseMsg.toLowerCase().includes('cache');
-          let main = isCacheHit ? 'Loaded from cache' : (stageLabel ? `${stageLabel} — ${baseMsg}` : baseMsg);
+          let main = isCacheHit ? 'Loaded from cache' : (stageLabel ? `${stageLabel} -- ${baseMsg}` : baseMsg);
           let stats = '';
           if (tot && proc != null) stats += `${proc}/${tot} integrations`;
-          if (p.throughput && isFinite(p.throughput)) stats += (stats ? ' • ' : '') + `${p.throughput.toFixed(1)}/s`;
+          if (p.throughput && isFinite(p.throughput)) stats += (stats ? ' | ' : '') + `${p.throughput.toFixed(1)}/s`;
           updateProgress(p.percent || 0, main, stats);
           if (p.status === 'done') {
-            updateProgress(100, 'Finalizing…', stats);
+            updateProgress(100, 'Finalizing...', stats);
             clearInterval(__progressTimer);
             __progressTimer = null;
             resolve();
@@ -365,7 +305,7 @@ async function uploadMastDirectory() {
       poll();
     });
 
-    // --- 4. Fetch results ---
+    // 4. Fetch results
     const res = await fetch(`/results/${__currentJobId}`);
     if (!res.ok) { const t = await res.text(); throw new Error(`HTTP ${res.status}: ${t}`); }
     const data = await res.json();
@@ -374,7 +314,7 @@ async function uploadMastDirectory() {
     if (data.metadata) displayMetadata(data.metadata);
     if (data.reference_spectrum) { try { window.__referenceSpectrum = JSON.parse(data.reference_spectrum); } catch(_) { window.__referenceSpectrum = null; } }
 
-    // --- 5. Render plots ---
+    // 5. Render plots
     const surfaceData = JSON.parse(data.surface_plot);
     const heatmapData = JSON.parse(data.heatmap_plot);
 
@@ -412,7 +352,7 @@ async function uploadMastDirectory() {
       createPlot('heatmapPlot', heatmapData.data, heatmapData.layout, { responsive: true })
     ]);
 
-    // --- 6. Signal tour that plots are loaded ---
+    // 6. Signal tour that plots are loaded
     window.stampsDataLoaded = true;
 
     Plotly.Plots.resize(document.getElementById('surfacePlot'));
@@ -423,7 +363,7 @@ async function uploadMastDirectory() {
         document.getElementById('plotsContainer').scrollIntoView({ behavior: 'smooth' });
     }
 
-    // --- 7. Render band buttons ---
+    // 7. Render band buttons
     renderBandButtons();
     setActiveBand(null);
   } catch (error) {

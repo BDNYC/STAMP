@@ -1,12 +1,4 @@
-"""
-routes/jobs.py
-Background job management routes for async MAST data processing.
-
-The ``/start_mast`` route spawns a daemon thread running ``_run_mast_job()``,
-which processes the uploaded zip, caches results, builds plots, and stores
-the final payload in ``state.RESULTS``.  Clients poll ``/progress/<job_id>``
-for status and retrieve results from ``/results/<job_id>``.
-"""
+"""Background job management routes for async MAST data processing."""
 
 import os
 import json
@@ -36,25 +28,8 @@ logger = logging.getLogger(__name__)
 jobs_bp = Blueprint('jobs', __name__)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _extract_and_sort(zip_path, work_dir):
-    """Extract a ZIP archive and return FITS/H5 paths sorted by observation time.
-
-    Parameters
-    ----------
-    zip_path : str
-        Path to the ZIP file.
-    work_dir : str
-        Directory to extract into.
-
-    Returns
-    -------
-    list of str
-        File paths sorted chronologically by their first observation timestamp.
-    """
+    """Extract a ZIP archive and return FITS/H5 paths sorted by observation time."""
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall(work_dir)
 
@@ -82,35 +57,8 @@ def _extract_and_sort(zip_path, work_dir):
     return [fp for fp, _ in sorted(file_times, key=lambda x: x[1])]
 
 
-# ---------------------------------------------------------------------------
-# Background worker
-# ---------------------------------------------------------------------------
-
 def _run_mast_job(job_id, zip_path, form_args):
-    """Background worker that processes a MAST zip file.
-
-    Stages
-    ------
-    1. **Cache check** — if the same zip + interpolation flag has been
-       processed before, load the cached arrays and skip to filtering.
-    2. **Extract & sort** — unzip and sort files chronologically.
-    3. **Process** — run the full pipeline via
-       :func:`processing.process_mast_files_with_gaps`.
-    4. **Cache store** — save the processed arrays for future re-use.
-    5. **Sample** — optionally sub-sample to the requested integration count.
-    6. **Filter** — apply user-specified wavelength / time / z-axis ranges.
-    7. **Plot** — build the 3-D surface and heatmap figures.
-    8. **Store** — place the final payload in ``state.RESULTS[job_id]``.
-
-    Parameters
-    ----------
-    job_id : str
-        Unique identifier for this job.
-    zip_path : str
-        Path to the uploaded (or demo) zip file.
-    form_args : dict
-        Parsed form parameters (bands, colorscale, ranges, etc.).
-    """
+    """Background worker: process a MAST zip through the full pipeline and store results."""
     _progress_set(job_id, reset=True, percent=1.0, message="Queued…", stage="queued")
     temp_dir = tempfile.mkdtemp(prefix=f"mast_job_{job_id[:8]}_")
     is_demo = form_args.get("is_demo", False)
@@ -119,14 +67,12 @@ def _run_mast_job(job_id, zip_path, form_args):
         use_interpolation = form_args["use_interpolation"]
         num_integrations = form_args["num_integrations"]
 
-        # ------------------------------------------------------------------
         # Stage 1: Cache check
-        # ------------------------------------------------------------------
         _progress_set(job_id, percent=2.0, message="Checking cache…", stage="scan")
 
         cache_key_path = zip_path
 
-        logger.info(f"🔍 Job {job_id[:8]}: Cache lookup parameters:")
+        logger.info(f"Job {job_id[:8]}: Cache lookup parameters:")
         logger.info(f"   zip_path: {os.path.basename(zip_path)}")
         logger.info(f"   cache_key_path: {os.path.basename(cache_key_path)}")
         logger.info(f"   interpolation: {use_interpolation}")
@@ -135,8 +81,7 @@ def _run_mast_job(job_id, zip_path, form_args):
         cached_data = cache.get(cache_key_path, use_interpolation)
 
         if cached_data:
-            # --- Cache HIT -------------------------------------------------
-            logger.info(f"✅ Job {job_id[:8]}: Cache HIT!")
+            logger.info(f"Job {job_id[:8]}: Cache HIT!")
             logger.info(f"   Cached metadata total_integrations:   {cached_data['metadata'].get('total_integrations', 'unknown')}")
             logger.info(f"   Cached metadata plotted_integrations: {cached_data['metadata'].get('plotted_integrations', 'unknown')}")
             logger.info(f"   Cached time_1d length: {len(cached_data['time_1d'])}")
@@ -153,11 +98,10 @@ def _run_mast_job(job_id, zip_path, form_args):
             metadata = copy.deepcopy(cached_data['metadata'])
             error_raw_2d = cached_data['error_raw_2d'].copy()
 
-            logger.info(f"   ✓ Data copied from cache")
+            logger.info(f"   Data copied from cache")
 
         else:
-            # --- Cache MISS ------------------------------------------------
-            logger.info(f"❌ Job {job_id[:8]}: Cache MISS - processing from scratch")
+            logger.info(f"Job {job_id[:8]}: Cache MISS - processing from scratch")
 
             # Stage 2: Extract & sort
             work_dir = os.path.join(temp_dir, "unzipped")
@@ -202,24 +146,22 @@ def _run_mast_job(job_id, zip_path, form_args):
             }
 
             cache.set(cache_key_path, use_interpolation, cache_data)
-            logger.info(f"💾 Data cached successfully")
+            logger.info(f"Data cached successfully")
 
-        logger.info(f"📊 Job {job_id[:8]}: Data state after cache retrieval:")
+        logger.info(f"Job {job_id[:8]}: Data state after cache retrieval:")
         logger.info(f"   metadata total_integrations: {metadata.get('total_integrations', 'unknown')}")
         logger.info(f"   metadata plotted_integrations:   {metadata.get('plotted_integrations', 'unknown')}")
         logger.info(f"   time_1d length:  {len(time_1d)}")
         logger.info(f"   time_1d range: {time_1d.min():.2f} to {time_1d.max():.2f} hours")
 
-        # ------------------------------------------------------------------
         # Stage 5: Sample (optional)
-        # ------------------------------------------------------------------
         if num_integrations and num_integrations > 0 and num_integrations < len(time_1d):
             _progress_set(
                 job_id, percent=94.0,
                 message=f"Sampling to {num_integrations} integrations…",
                 stage="finalize",
             )
-            logger.info(f"🎯 Sampling from {len(time_1d)} to {num_integrations} integrations")
+            logger.info(f"Sampling from {len(time_1d)} to {num_integrations} integrations")
 
             step = len(time_1d) / num_integrations
             indices = [int(i * step) for i in range(num_integrations)]
@@ -231,12 +173,10 @@ def _run_mast_job(job_id, zip_path, form_args):
 
             metadata['plotted_integrations'] = num_integrations
 
-            logger.info(f"   ✓ Sampled to {len(time_1d)} integrations")
+            logger.info(f"   Sampled to {len(time_1d)} integrations")
             logger.info(f"   New flux shape: {flux_raw_2d.shape}")
 
-        # ------------------------------------------------------------------
         # Stage 6: Filter — apply user-specified ranges
-        # ------------------------------------------------------------------
         _progress_set(job_id, percent=95.0, message="Applying filters…", stage="finalize")
 
         custom_bands = form_args["custom_bands"]
@@ -257,7 +197,7 @@ def _run_mast_job(job_id, zip_path, form_args):
             wavelength_1d_err, error_raw_2d_filtered, time_1d_err, _ = apply_data_ranges(
                 wavelength_1d, error_raw_2d, time_1d, wavelength_range, time_range,
             )
-            logger.info(f"   ✂️ Ranges applied:   {'; '.join(range_info)}")
+            logger.info(f"   Ranges applied: {'; '.join(range_info)}")
         else:
             wavelength_1d_norm, flux_norm_2d_filtered, time_1d_norm = wavelength_1d, flux_norm_2d, time_1d
             wavelength_1d_raw, flux_raw_2d_filtered, time_1d_raw = wavelength_1d, flux_raw_2d, time_1d
@@ -266,7 +206,7 @@ def _run_mast_job(job_id, zip_path, form_args):
 
         metadata['user_ranges'] = '; '.join(range_info) if range_info else None
 
-        logger.info(f"📈 Job {job_id[:8]}: Final data for plotting:")
+        logger.info(f"Job {job_id[:8]}: Final data for plotting:")
         logger.info(f"   time_1d_norm length: {len(time_1d_norm)}")
         logger.info(f"   time_1d_norm range: {time_1d_norm.min():.2f} to {time_1d_norm.max():.2f} hours")
         logger.info(f"   flux shape: {flux_norm_2d_filtered.shape}")
@@ -283,9 +223,7 @@ def _run_mast_job(job_id, zip_path, form_args):
 
         ref_spec = np.nanmedian(np.asarray(flux_raw_2d_filtered), axis=1)
 
-        # ------------------------------------------------------------------
         # Stage 7: Plot
-        # ------------------------------------------------------------------
         _progress_set(
             job_id, percent=96.0, message="Rendering plots…", stage="finalize",
             processed_integrations=_progress_set(job_id)["processed_integrations"],
@@ -331,9 +269,7 @@ def _run_mast_job(job_id, zip_path, form_args):
         state.last_heatmap_fig_json = heatmap_plot.to_plotly_json()
         state.last_custom_bands = custom_bands
 
-        # ------------------------------------------------------------------
         # Stage 8: Store results
-        # ------------------------------------------------------------------
         payload = {
             'surface_plot': surface_plot.to_json(),
             'heatmap_plot': heatmap_plot.to_json(),
@@ -344,11 +280,11 @@ def _run_mast_job(job_id, zip_path, form_args):
         with PROG_LOCK:
             RESULTS[job_id] = payload
 
-        logger.info(f"✅ Job {job_id[:8]}: Completed successfully")
+        logger.info(f"Job {job_id[:8]}: Completed successfully")
         _progress_set(job_id, percent=100.0, message="Done", status="done", stage="done")
 
     except Exception as e:
-        logger.exception(f"❌ Job {job_id[:8]}:   Background job failed")
+        logger.exception(f"Job {job_id[:8]}: Background job failed")
         _progress_set(job_id, message=str(e), status="error", stage="error")
     finally:
         try:
@@ -362,20 +298,10 @@ def _run_mast_job(job_id, zip_path, form_args):
                 pass
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
 @jobs_bp.route('/start_mast', methods=['POST'])
 def start_mast():
-    """Start an asynchronous MAST data processing job.
-
-    Parses form parameters, saves the uploaded ZIP (or locates the demo
-    dataset), spawns a background thread, and immediately returns a
-    ``job_id`` (HTTP 202 Accepted).
-    """
+    """Start an async MAST processing job; returns a job_id (HTTP 202)."""
     try:
-        # --- Resolve zip source (demo vs upload) ---------------------------
         use_demo = request.form.get('use_demo', 'false').lower() == 'true'
 
         if use_demo:
@@ -392,7 +318,7 @@ def start_mast():
             mast_file.save(tmp_zip)
             logger.info(f"Processing uploaded file: {mast_file.filename}")
 
-        # --- Parse form parameters -----------------------------------------
+        # Parse form parameters
         custom_bands_json = request.form.get('custom_bands', '[]')
         try:
             custom_bands = json.loads(custom_bands_json)
@@ -427,7 +353,7 @@ def start_mast():
             v_max = float(variability_range_max) if variability_range_max else None
             variability_range = (v_min, v_max)
 
-        # --- Spawn background thread --------------------------------------
+        # Spawn background thread
         job_id = uuid.uuid4().hex
         _progress_set(job_id, reset=True, percent=1.0, message="Queued…", stage="queued")
         form_args = {
@@ -446,7 +372,7 @@ def start_mast():
         return jsonify({"job_id": job_id}), 202
 
     except Exception as e:
-        logger.error(f"Error starting job:  {e}", exc_info=True)
+        logger.error(f"Error starting job: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 400
 
 

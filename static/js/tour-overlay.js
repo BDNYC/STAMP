@@ -1,41 +1,9 @@
-/*
- * ============================================================================
- * tour-overlay.js — Visual Layer (highlighting, overlay, scroll, positioning)
- * ============================================================================
- *
- * Pure DOM-manipulation functions for the tour's visual effects.  These
- * functions have NO tour lifecycle logic — they are called by tour-core.js.
- *
- * Requires:  tour-steps.js (provides tourSteps, currentStep)
- *
- * Z-index hierarchy (lowest → highest):
- *   9998  .tour-overlay-section  — dark semi-transparent overlay panels
- *   9999  #tourHighlight /
- *         .tour-multi-highlight  — white-border highlight boxes
- *  10000  interactive elements   — elements the user must click during tour
- *  10001  #tourMessageBox        — message box (always on top for button clicks)
- *
- * Load order:  tour-steps.js → tour-overlay.js → tour-core.js
- * ============================================================================
- */
+/* tour-overlay.js -- Visual Layer (highlighting, overlay, scroll, positioning) */
 
-console.log(' TOUR-OVERLAY.JS LOADED');
+console.log('TOUR-OVERLAY.JS LOADED');
 
 
-// ---------------------------------------------------------------------------
-// highlightMultipleElements — highlight several elements simultaneously
-// ---------------------------------------------------------------------------
-
-/**
- * Highlight multiple DOM elements at once with white-bordered boxes and
- * create a darkened overlay with cutouts around them.
- *
- * Used for steps that reference related UI groups (e.g. a plot and its
- * band buttons).  Each selector gets its own highlight box positioned
- * absolutely over the element.
- *
- * @param {string[]} selectors - CSS selectors for elements to highlight.
- */
+/** Highlight multiple DOM elements at once with white-bordered boxes and overlay cutouts. */
 function highlightMultipleElements(selectors) {
     const highlight = document.getElementById('tourHighlight');
     if (!highlight) return;
@@ -85,29 +53,7 @@ function highlightMultipleElements(selectors) {
 }
 
 
-// ---------------------------------------------------------------------------
-// updateOverlayWithCutouts — dark overlay that leaves highlighted areas clear
-// ---------------------------------------------------------------------------
-
-/**
- * Create four (or five) absolutely-positioned dark overlay panels around
- * the highlighted elements, leaving transparent cutouts so the highlighted
- * areas remain visible.
- *
- * Layout (single cutout):
- *   ┌──────────────────────────────┐
- *   │         TOP overlay          │
- *   ├────┬────────────────┬────────┤
- *   │LEFT│   (cutout)     │  RIGHT │
- *   ├────┴────────────────┴────────┤
- *   │        BOTTOM overlay        │
- *   └──────────────────────────────┘
- *
- * For two non-adjacent cutouts, a fifth "middle" panel fills the gap
- * between the two cutouts in the horizontal band.
- *
- * @param {string[]} selectors - CSS selectors for the highlighted elements.
- */
+/** Create dark overlay panels around highlighted elements, leaving transparent cutouts. */
 function updateOverlayWithCutouts(selectors) {
     const overlay = document.getElementById('tourOverlay');
     if (!overlay) return;
@@ -149,7 +95,7 @@ function updateOverlayWithCutouts(selectors) {
         scrollTop + viewportHeight + 1000
     );
 
-    // --- TOP panel: from page top to the top of the highest element -------
+    // TOP panel
     const topDiv = document.createElement('div');
     topDiv.className = 'tour-overlay-section';
     const topHeight = Math.min(...rects.map(r => r.top));
@@ -165,7 +111,7 @@ function updateOverlayWithCutouts(selectors) {
     `;
     document.body.appendChild(topDiv);
 
-    // --- BOTTOM panel: from bottom of lowest element to page bottom -------
+    // BOTTOM panel
     const bottomTop = Math.max(...rects.map(r => r.bottom));
     const bottomDiv = document.createElement('div');
     bottomDiv.className = 'tour-overlay-section';
@@ -181,7 +127,7 @@ function updateOverlayWithCutouts(selectors) {
     `;
     document.body.appendChild(bottomDiv);
 
-    // --- LEFT panel: middle band, left of leftmost element ----------------
+    // LEFT panel
     const middleTop = Math.min(...rects.map(r => r.top));
     const middleBottom = Math.max(...rects.map(r => r.bottom));
     const leftDiv = document.createElement('div');
@@ -198,7 +144,7 @@ function updateOverlayWithCutouts(selectors) {
     `;
     document.body.appendChild(leftDiv);
 
-    // --- RIGHT panel: middle band, right of rightmost element -------------
+    // RIGHT panel
     const rightLeft = Math.max(...rects.map(r => r.right));
     const rightDiv = document.createElement('div');
     rightDiv.className = 'tour-overlay-section';
@@ -214,7 +160,7 @@ function updateOverlayWithCutouts(selectors) {
     `;
     document.body.appendChild(rightDiv);
 
-    // --- MIDDLE gap panel: for 2-element pairs with a horizontal gap ------
+    // MIDDLE gap panel: for 2-element pairs with a horizontal gap
     if (rects.length === 2) {
         const leftRect = rects[0].left < rects[1].left ? rects[0] : rects[1];
         const rightRect = rects[0].left < rects[1].left ? rects[1] : rects[0];
@@ -238,19 +184,7 @@ function updateOverlayWithCutouts(selectors) {
 }
 
 
-// ---------------------------------------------------------------------------
-// scrollToElement — smart scrolling with viewport-aware margins
-// ---------------------------------------------------------------------------
-
-/**
- * Scroll the page so that the target element is comfortably visible,
- * accounting for the tour message box position and viewport margins.
- *
- * Skips scrolling if the element is already fully visible with margins.
- * Handles elements near the page bottom with gentler positioning.
- *
- * @param {HTMLElement} element - The DOM element to scroll into view.
- */
+/** Scroll the page so that the target element is comfortably visible. */
 function scrollToElement(element) {
     const elementRect = element.getBoundingClientRect();
     const absoluteElementTop = elementRect.top + window.pageYOffset;
@@ -261,8 +195,8 @@ function scrollToElement(element) {
 
     // Get current step to determine message box position
     const step = tourSteps[currentStep];
-    const topMargin = 100;    // space at top of viewport
-    const bottomMargin = 150; // space at bottom (extra room for message box)
+    const topMargin = 100;
+    const bottomMargin = 150;
 
     let targetScroll;
 
@@ -274,8 +208,7 @@ function scrollToElement(element) {
         return; // already well positioned
     }
 
-    // Calculate document bounds — use visible content height, not full scrollHeight,
-    // to avoid scrolling into empty space when sections are hidden
+    // Calculate document bounds
     const documentHeight = Math.max(
         document.body.scrollHeight,
         document.documentElement.scrollHeight
@@ -283,7 +216,6 @@ function scrollToElement(element) {
     const maxScroll = Math.max(0, documentHeight - viewportHeight);
 
     // Clamp scroll so the bottom of the viewport never extends past visible content.
-    // This prevents scrolling into empty space below the last visible element.
     const visibleBottom = absoluteElementBottom + bottomMargin;
     const contentMaxScroll = Math.max(0, visibleBottom - viewportHeight);
     const effectiveMaxScroll = Math.min(maxScroll, contentMaxScroll);
@@ -293,24 +225,20 @@ function scrollToElement(element) {
     const isNearBottom = elementDistanceFromBottom < viewportHeight * 0.5;
 
     if (isNearBottom) {
-        // Scroll just enough to show the element with top/bottom margins
         targetScroll = Math.min(
             absoluteElementTop - topMargin,
             absoluteElementBottom - viewportHeight + bottomMargin
         );
         targetScroll = Math.max(0, Math.min(targetScroll, effectiveMaxScroll));
     } else if (step && step.position === 'right') {
-        // Message box on right — vertically center the element
         const elementCenter = (absoluteElementTop + absoluteElementBottom) / 2;
         targetScroll = elementCenter - (viewportHeight / 2);
         targetScroll = Math.max(0, Math.min(targetScroll, effectiveMaxScroll));
     } else if (step && step.position === 'left') {
-        // Message box on left — vertically center the element
         const elementCenter = (absoluteElementTop + absoluteElementBottom) / 2;
         targetScroll = elementCenter - (viewportHeight / 2);
         targetScroll = Math.max(0, Math.min(targetScroll, effectiveMaxScroll));
     } else {
-        // Default: position element near top with margin
         targetScroll = absoluteElementTop - topMargin;
         targetScroll = Math.max(0, Math.min(targetScroll, effectiveMaxScroll));
     }
@@ -322,19 +250,7 @@ function scrollToElement(element) {
 }
 
 
-// ---------------------------------------------------------------------------
-// highlightElement — single-element highlight with overlay cutout
-// ---------------------------------------------------------------------------
-
-/**
- * Highlight a single DOM element by positioning the #tourHighlight box
- * over it, then creating a darkened overlay cutout around it.
- *
- * For the 3D surface plot, a special CSS class prevents the highlight
- * from brightening the plot colors.
- *
- * @param {HTMLElement} element - The DOM element to highlight.
- */
+/** Highlight a single DOM element by positioning #tourHighlight over it. */
 function highlightElement(element) {
     const highlight = document.getElementById('tourHighlight');
     if (!highlight) return;
@@ -342,8 +258,7 @@ function highlightElement(element) {
     // Remove previous multi-highlights (single highlight uses #tourHighlight)
     document.querySelectorAll('.tour-multi-highlight').forEach(el => el.remove());
 
-    // Wait one frame for layout to settle (e.g. after hiding the tour prompt),
-    // then position highlight and overlay together so there's no flash
+    // Wait one frame for layout to settle, then position highlight and overlay together
     requestAnimationFrame(() => {
         const rect = element.getBoundingClientRect();
         const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
@@ -371,8 +286,7 @@ function highlightElement(element) {
             element.style.zIndex = '10000';
         }
 
-        // Update overlay cutouts in the same frame — updateOverlayWithCutouts
-        // removes old sections before creating new ones, so no flash
+        // Update overlay cutouts in the same frame
         const selector = step.element;
         if (selector) {
             updateOverlayWithCutouts([selector]);
@@ -381,38 +295,7 @@ function highlightElement(element) {
 }
 
 
-// ---------------------------------------------------------------------------
-// positionMessageBox — complex message box positioning logic
-// ---------------------------------------------------------------------------
-
-/**
- * Position the tour message box relative to the highlighted element.
- *
- * This function handles five distinct positioning strategies based on the
- * current tour step:
- *
- * 1. **Surface plot steps** (surface-plot, surface-bands, enable-click):
- *    Left-side positioning, vertically centred on the 3D plot.  The
- *    position is cached in window.surfacePlotMessagePosition so subsequent
- *    surface steps stay pinned in the same spot.
- *
- * 2. **Spectrum / heatmap steps** (spectrum-viewer through heatmap-bands):
- *    Right-side positioning at ~95% down the viewport so the message box
- *    doesn't cover the plot data.
- *
- * 3. **Generic "left" position**:
- *    Centred in the space to the left of the main content container.
- *
- * 4. **Generic "right" position** (default):
- *    Centred in the space to the right of the main content container,
- *    vertically aligned with the highlighted element.
- *
- * 5. **File-selection override**:
- *    Fixed at 35% down the viewport for a comfortable first-step position.
- *
- * @param {HTMLElement} element  - The highlighted DOM element.
- * @param {'left'|'right'|'center'} position - Requested side for the box.
- */
+/** Position the tour message box relative to the highlighted element. */
 function positionMessageBox(element, position) {
     const messageBox = document.getElementById('tourMessageBox');
     if (!messageBox) return;
@@ -426,9 +309,7 @@ function positionMessageBox(element, position) {
 
     const step = tourSteps[currentStep];
 
-    // ======================================================================
-    // Strategy 1: Surface plot steps — left side, cached position
-    // ======================================================================
+    // Strategy 1: Surface plot steps -- left side, cached position
     const surfacePlotSteps = ['surface-plot', 'surface-bands', 'enable-click'];
 
     // Initialise the position cache if needed
@@ -506,9 +387,7 @@ function positionMessageBox(element, position) {
         return;
     }
 
-    // ======================================================================
-    // Strategy 2: Spectrum / heatmap steps — right side, lower viewport
-    // ======================================================================
+    // Strategy 2: Spectrum / heatmap steps -- right side, lower viewport
     const spectrumSteps = ['spectrum-viewer', 'spectrum-bands', 'error-bars', 'navigation-controls', 'x-axis-switch', 'time-mode-bands'];
     const heatmapSteps = ['heatmap', 'heatmap-bands'];
 
@@ -553,13 +432,10 @@ function positionMessageBox(element, position) {
         return;
     }
 
-    // ======================================================================
     // Strategy 3 & 4: Generic left / right positioning
-    // ======================================================================
     let left, top;
 
     if (position === 'left') {
-        // --- Strategy 3: Left side of viewport ---
         const messageBoxWidth = 280;
         if (containerRect) {
             const spaceBeforeContainer = containerRect.left;
@@ -575,7 +451,6 @@ function positionMessageBox(element, position) {
         if (left < minLeft) left = minLeft;
 
     } else if (containerRect) {
-        // --- Strategy 4: Right side of container (default) ---
         const viewportWidth = window.innerWidth;
         const messageBoxWidth = 280;
         const spaceAfterContainer = viewportWidth - containerRect.right;
@@ -618,9 +493,7 @@ function positionMessageBox(element, position) {
         if (top < absoluteMinTop) top = absoluteMinTop;
     }
 
-    // ======================================================================
-    // Strategy 5: File-selection override — fixed 35% down viewport
-    // ======================================================================
+    // Strategy 5: File-selection override -- fixed 35% down viewport
     if (step && step.id === 'file-selection') {
         const viewportHeight = window.innerHeight;
         top = scrollTop + (viewportHeight * 0.35);

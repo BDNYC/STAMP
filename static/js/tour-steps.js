@@ -1,67 +1,24 @@
-/*
- * ============================================================================
- * tour-steps.js — Tour Step Configuration & Shared State
- * ============================================================================
- *
- * This file is loaded FIRST among the tour scripts. It defines:
- *   1. Shared mutable state (currentStep, tourActive) read/written by all
- *      tour files via the global scope.
- *   2. The tourSteps array — the complete 23-step tour configuration.
- *
- * Each step object has these properties:
- *   - id            {string}   Unique kebab-case identifier.
- *   - element       {string|null}  CSS selector for the DOM element to highlight.
- *   - title         {string}   Short title shown in the message box.
- *   - message       {string}   Descriptive text explaining the feature.
- *   - position      {'left'|'right'|'center'}  Where the message box appears.
- *   - waitFor       {string|null}  Condition to poll for before enabling "Next":
- *                               'plotsLoaded' or 'spectrumOpened'.
- *   - action        {string|null}  Special action hint (e.g. 'checkBox').
- *   - autoNext      {boolean}  If true, auto-advance after waitFor resolves.
- *   - skipScroll    {boolean}  If true, don't scroll to the element.
- *   - highlightMultiple {string[]}  Array of selectors to highlight simultaneously.
- *   - isEnd         {boolean}  Marks the final tour step.
- *
- * Load order:  tour-steps.js → tour-overlay.js → tour-core.js
- * ============================================================================
- */
+/* tour-steps.js -- Tour Step Configuration & Shared State */
 
-console.log(' TOUR-STEPS.JS LOADED');
+console.log('TOUR-STEPS.JS LOADED');
 
-// ---------------------------------------------------------------------------
-// Shared state — read and written by tour-overlay.js and tour-core.js
-// ---------------------------------------------------------------------------
+/* Shared state -- read and written by tour-overlay.js and tour-core.js */
 
-/** @type {string} localStorage key (reserved for future "don't show again") */
+/** localStorage key (reserved for future "don't show again") */
 const TOUR_STORAGE_KEY = 'stamp_tour_completed';
 
-/** @type {number} Index of the currently displayed tour step */
+/** Index of the currently displayed tour step */
 // eslint-disable-next-line no-unused-vars
 let currentStep = 0;
 
-/** @type {boolean} Whether the tour is currently running */
+/** Whether the tour is currently running */
 // eslint-disable-next-line no-unused-vars
 let tourActive = false;
 
-// ---------------------------------------------------------------------------
-// Tour step definitions (23 steps)
-// ---------------------------------------------------------------------------
+/* Tour step definitions (23 steps) */
 
-/**
- * Complete tour configuration.
- *
- * Steps 1–6:   Input settings (file, interpolation, z-axis, ranges, colors, bands)
- * Step 7:      "Process Data" button — waits for plots to load, then auto-advances
- * Steps 8–11:  Results overview (metadata, 3-D surface, bands, spectrum viewer)
- * Steps 12–17: Spectrum viewer controls (bands, errors, navigation, mode switch)
- * Steps 18–19: Heatmap view and bands
- * Step 20:     Download
- * Step 21:     Tour complete (end step)
- *
- * @type {Array<Object>}
- */
+/** Complete tour configuration array. */
 const tourSteps = [
-    // ---- Input settings (steps 1–6) -------------------------------------
     {
         id: 'file-selection',
         element: '#fileDisplay',
@@ -121,7 +78,6 @@ const tourSteps = [
         skipScroll: false
     },
 
-    // ---- Process button (step 7) — waits for data loading ----------------
     {
         id: 'compile-button',
         element: '#uploadMastBtn',
@@ -133,7 +89,6 @@ const tourSteps = [
         autoNext: true
     },
 
-    // ---- Results overview (steps 8–11) -----------------------------------
     {
         id: 'metadata',
         element: '#metadataInfo',
@@ -177,7 +132,6 @@ const tourSteps = [
         highlightMultiple: ['#surfacePlot', '#enableSurfaceClick']
     },
 
-    // ---- Spectrum viewer controls (steps 12–17) --------------------------
     {
         id: 'spectrum-viewer',
         element: '#spectrumContainer',
@@ -244,7 +198,6 @@ const tourSteps = [
         highlightMultiple: ['#spectrumContainer', '#spectrumBandButtons']
     },
 
-    // ---- Heatmap (steps 18–19) -------------------------------------------
     {
         id: 'heatmap',
         element: '#heatmapPlot',
@@ -267,7 +220,6 @@ const tourSteps = [
         highlightMultiple: ['#heatmapPlot', '#heatmapBandButtons']
     },
 
-    // ---- Download & finish (steps 20–21) ---------------------------------
     {
         id: 'download-graphs',
         element: 'a[href="/download_plots"]',
