@@ -11,22 +11,14 @@
     border-radius: 12px;
     padding: 16px;
     width: 240px;
-    z-index: 10000;
+    z-index: 10000 !important;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     animation: slideInRight 0.5s ease-out;
 }
 
-/* Responsive adjustment for smaller screens */
 @media (max-width: 1280px) {
     #tourPrompt {
         left: auto;
-        right: 30px;
-    }
-}
-
-/* Responsive adjustment for smaller screens */
-@media (max-width: 1280px) {
-    #tourPrompt {
         right: 30px;
     }
 }
@@ -82,7 +74,7 @@
 
 /* Tour Message Box */
 #tourMessageBox {
-    position: fixed;
+    position: absolute;
     right: 30px;
     top: 50%;
     transform: translateY(-50%);
@@ -92,14 +84,16 @@
     padding: 24px;
     width: 280px;
     max-width: calc(100vw - 40px);
-    z-index: 10001;
+    z-index: 10001 !important;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
-    animation: fadeIn 0.2s ease-out;
-    transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-                top 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-                transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-                opacity 0.15s ease-out;
-    position: relative;
+    transition: left 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                top 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.2s ease-out;
+}
+
+#tourMessageBox.no-transition {
+    transition: none !important;
 }
 
 /* Close X button */
@@ -139,7 +133,6 @@
     font-weight: 600;
     margin: 0 0 12px 0;
     padding-right: 24px;
-    transition: opacity 0.2s ease-out;
 }
 
 #tourMessageBox .tour-message {
@@ -147,7 +140,6 @@
     font-size: 14px;
     margin: 0 0 20px 0;
     line-height: 1.6;
-    transition: opacity 0.2s ease-out;
 }
 
 #tourMessageBox .tour-buttons {
@@ -183,7 +175,6 @@
     opacity: 0.5;
 }
 
-/* Force hide skip button */
 #tourSkipBtn {
     display: none !important;
 }
@@ -205,38 +196,26 @@
     margin-top: 12px;
 }
 
-/* Dark Overlay */
+/* Dark Overlay -- persistent full-screen dimming layer */
 #tourOverlay {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: transparent;
-    z-index: 9998;
-    animation: fadeIn 0.3s ease-out;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 9998 !important;
     pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease-out;
 }
 
-/* Keep 3D plot visible during band selection */
-#tourOverlay.preserve-plot {
-    background: rgba(0, 0, 0, 0.7);
-    pointer-events: none;
+#tourOverlay.active {
+    opacity: 1;
 }
 
-#tourOverlay.preserve-plot::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: transparent;
-}
-
-
-/* Highlight Box */
-#tourHighlight {
+/* Highlight Box Pool -- reusable boxes that animate between positions */
+.tour-highlight-box {
     position: absolute;
     border: 3px solid #ffffff;
     border-radius: 8px;
@@ -244,41 +223,30 @@
         0 0 20px rgba(255, 255, 255, 0.8),
         0 0 40px rgba(255, 255, 255, 0.5);
     background: transparent;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    pointer-events: auto;
-    z-index: 9999;
+    pointer-events: none;
+    z-index: 9999 !important;
+    opacity: 0;
+    transition:
+        top 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        left 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.25s ease-out;
     animation: pulseGlow 2s ease-in-out infinite;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tour-highlight-box.visible {
     opacity: 1;
 }
 
-/* Remove brightening for 3D plot */
-#tourHighlight.highlight-plot {
-    background: transparent !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
+.tour-highlight-box.no-transition {
+    transition: none !important;
 }
 
-#tourHighlight.hidden {
-    opacity: 0;
-    pointer-events: none;
-}
-
-
-/* Allow clicks through highlight */
-#tourHighlight.allow-interaction {
-    pointer-events: none;
-}
-
-#tourHighlight.allow-interaction::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    pointer-events: auto;
+/* Elevate highlighted elements above the overlay */
+.tour-elevated {
+    position: relative !important;
+    z-index: 9999 !important;
 }
 
 /* Animations */
@@ -294,12 +262,8 @@
 }
 
 @keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 @keyframes pulseGlow {
@@ -338,39 +302,7 @@
     background: rgba(59, 130, 246, 0.1);
 }
 
-/* Ensure tour elements stay on top of Plotly modebar */
-#tourMessageBox,
-#tourHighlight,
-#tourOverlay,
-#tourPrompt {
-    z-index: 10000 !important;
-}
-
-#tourMessageBox {
-    z-index: 10001 !important;
-}
-
 /* Prevent horizontal scrollbar */
 body.tour-active {
     overflow-x: hidden;
-}
-
-/* Multi-highlight boxes */
-.tour-multi-highlight {
-    background: transparent !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-}
-
-/* Smooth fade for overlay sections */
-.tour-overlay-section {
-    transition: opacity 0.3s ease-out;
-}
-
-/* Smooth fade for multi-highlights */
-.tour-multi-highlight {
-    background: transparent !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    transition: opacity 0.3s ease-out;
 }

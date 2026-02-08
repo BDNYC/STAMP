@@ -286,7 +286,9 @@ function showSpectrumAtTime(clickData, plotDiv) {
   // 7. Open viewer and render
   document.getElementById('spectrumContainer').classList.remove('hidden');
   updateSpectrumPlot();
-  document.getElementById('spectrumContainer').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (!window.tourActive || !window.tourActive()) {
+    document.getElementById('spectrumContainer').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 }
 
 // Spectrum Plot Rendering

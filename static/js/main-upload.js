@@ -354,6 +354,7 @@ async function uploadMastDirectory() {
 
     // 6. Signal tour that plots are loaded
     window.stampsDataLoaded = true;
+    window.dispatchEvent(new CustomEvent('stampsDataLoaded'));
 
     Plotly.Plots.resize(document.getElementById('surfacePlot'));
     Plotly.Plots.resize(document.getElementById('heatmapPlot'));
