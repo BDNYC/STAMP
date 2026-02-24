@@ -67,6 +67,13 @@ function positionHighlights(selectors, opts) {
         box.style.height = (rect.height + 10) + 'px';
         box.classList.add('visible');
 
+        // Accent the feature boxes (index > 0) in multi-element steps
+        if (selectors.length > 1 && i > 0) {
+            box.classList.add('tour-highlight-accent');
+        } else {
+            box.classList.remove('tour-highlight-accent');
+        }
+
         // Elevate the actual DOM element above the overlay so it appears bright
         el.classList.add('tour-elevated');
 
@@ -93,6 +100,7 @@ function positionHighlights(selectors, opts) {
 function clearHighlights() {
     document.querySelectorAll('.tour-highlight-box').forEach(function (box) {
         box.classList.remove('visible');
+        box.classList.remove('tour-highlight-accent');
     });
     document.querySelectorAll('.tour-elevated').forEach(function (el) {
         el.classList.remove('tour-elevated');

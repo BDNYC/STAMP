@@ -257,7 +257,8 @@ function showSpectrumAtTime(clickData, plotDiv) {
     }
   }
 
-  const zAxisDisplay = document.querySelector('input[name="zAxisDisplay"]:checked').value;
+  const checkedRadio = document.querySelector('input[name="zAxisDisplay"]:checked');
+  const zAxisDisplay = checkedRadio ? checkedRadio.value : 'variability';
 
   // Apply reference spectrum filter if present
   let refSpec = Array.isArray(window.__referenceSpectrum) ? window.__referenceSpectrum.slice() : null;

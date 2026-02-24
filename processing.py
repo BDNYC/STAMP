@@ -154,6 +154,7 @@ def calculate_variability_from_raw_flux(flux_raw_2d):
     """Normalise raw flux per wavelength channel by its median (centered around 1.0)."""
     median_flux_per_wavelength = np.nanmedian(flux_raw_2d, axis=1, keepdims=True)
     median_flux_per_wavelength[median_flux_per_wavelength == 0] = 1.0
+    median_flux_per_wavelength[np.isnan(median_flux_per_wavelength)] = 1.0
     flux_norm_2d = flux_raw_2d / median_flux_per_wavelength
     logger.info(f"Median flux per wavelength shape: {median_flux_per_wavelength.shape}")
     logger.info(f"Normalized flux range: {np.nanmin(flux_norm_2d):.4f} to {np.nanmax(flux_norm_2d):.4f}")
@@ -161,7 +162,7 @@ def calculate_variability_from_raw_flux(flux_raw_2d):
 
 
 def process_mast_files_with_gaps(file_paths, use_interpolation=False,
-                                 max_integrations=None, progress_cb=None):
+                                 progress_cb=None):
     """Run the full processing pipeline on FITS/H5 files.
     Stages: scan, read, regrid, (optional) interpolate, normalise.
     Returns (common_wl, flux_norm_2d, flux_raw_2d, times_hours, metadata, error_raw_2d).
@@ -294,6 +295,11 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
     # Stage 3: Regrid to common wavelength grid
     min_wl = max(np.min(integ['wavelength']) for integ in all_integrations)
     max_wl = min(np.max(integ['wavelength']) for integ in all_integrations)
+    if min_wl >= max_wl:
+        raise ValueError(
+            f"No wavelength overlap between files (min={min_wl:.4f}, max={max_wl:.4f}). "
+            "Ensure all files cover a common wavelength range."
+        )
     n_wave = 1000
     common_wl = np.linspace(min_wl, max_wl, n_wave)
 

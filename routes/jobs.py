@@ -122,7 +122,6 @@ def _run_mast_job(job_id, zip_path, form_args):
                 process_mast_files_with_gaps(
                     fits_files_sorted,
                     use_interpolation,
-                    max_integrations=None,
                     progress_cb=cb,
                 )
             )
@@ -379,10 +378,9 @@ def start_mast():
 @jobs_bp.route('/progress/<job_id>')
 def get_progress(job_id):
     """Return the current progress record for a background job."""
-    rec = PROGRESS.get(job_id)
-    if not rec:
-        return jsonify({"error": "unknown job"}), 404
     with PROG_LOCK:
+        if job_id not in PROGRESS:
+            return jsonify({"error": "unknown job"}), 404
         out = dict(PROGRESS[job_id])
     return jsonify(out)
 
@@ -390,9 +388,10 @@ def get_progress(job_id):
 @jobs_bp.route('/results/<job_id>')
 def get_results(job_id):
     """Return the final result payload once a background job has completed."""
-    rec = PROGRESS.get(job_id)
-    if not rec:
-        return jsonify({"error": "unknown job"}), 404
+    with PROG_LOCK:
+        if job_id not in PROGRESS:
+            return jsonify({"error": "unknown job"}), 404
+        rec = dict(PROGRESS[job_id])
     if rec.get("status") == "error":
         return jsonify({"error": rec.get("message", "processing error")}), 500
     if rec.get("status") != "done":

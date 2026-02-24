@@ -214,6 +214,7 @@ function showStep(stepIndex) {
             if ('onscrollend' in window) {
                 const handler = function () {
                     window.removeEventListener('scrollend', handler);
+                    clearTimeout(highlightTimeout);
                     highlightTimeout = null;
                     onScrollSettled();
                 };

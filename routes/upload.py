@@ -204,8 +204,13 @@ def upload_spectrum_frames():
     that the client can later pass to ``/download_plots`` so the video
     is included in the export ZIP.
     """
-    fps = int(request.form.get('fps', 10))
-    crf = int(request.form.get('crf', 22))
+    try:
+        fps = int(request.form.get('fps', 10))
+        crf = int(request.form.get('crf', 22))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid fps or crf parameter"}), 400
+    fps = max(1, min(fps, 120))
+    crf = max(0, min(crf, 51))
     files = request.files.getlist('frames')
 
     if not files:
@@ -348,7 +353,6 @@ def upload_mast():
             process_mast_files_with_gaps(
                 fits_files_sorted,
                 use_interpolation,
-                max_integrations=num_integrations if num_integrations > 0 else None,
             )
         )
 
