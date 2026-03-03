@@ -116,6 +116,7 @@ function startTour() {
     }
 
     document.body.classList.add('tour-active');
+    lockScroll();
 
     // Instant scroll to top
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -347,6 +348,7 @@ function endTour() {
         nextBtn.textContent = 'Next';
     }
 
+    unlockScroll();
     document.body.classList.remove('tour-active');
 
     // Fade out highlights and overlay

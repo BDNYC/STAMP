@@ -4,109 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spectral Time-series Analysis and Mapping Program - MAST Data</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,600;1,6..72,300;1,6..72,400&family=Albert+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tour.css') }}">
-    <style>
-    .colorscale-option {
-        width: 40px;
-        height: 40px;
-        border-radius: 4px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        border: 2px solid transparent;
-    }
-    .colorscale-option:hover {
-        transform: scale(1.1);
-        border-color: #3B82F6;
-    }
-    .colorscale-option.selected {
-        border-color:    #3B82F6;
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
-    }
-    .viridis { background:  linear-gradient(to right, #440154, #31688e, #35b779, #fde725); }
-    .plasma { background: linear-gradient(to right, #0d0887, #7e03a8, #cc4778, #f89540, #f0f921); }
-    .inferno { background: linear-gradient(to right, #000004, #420a68, #932667, #dd513a, #fcffa4); }
-    .magma { background: linear-gradient(to right, #000004, #3b0f70, #8c2981, #de4968, #fcfdbf); }
-    .cividis { background: linear-gradient(to right, #00204d, #414487, #7a7e7d, #b9b665, #ffea46); }
-    .turbo { background: linear-gradient(to right, #30123b, #4454c4, #42be71, #f1d626, #7a0403); }
-    .spectral { background: linear-gradient(to right, #9e0142, #f46d43, #fee08b, #abdda4, #5e4fa2); }
-    .rdylbu { background: linear-gradient(to right, #a50026, #f46d43, #fee090, #abd9e9, #313695); }
-    .picnic { background: linear-gradient(to right, #0000ff, #3399ff, #66ccff, #99ffff, #ccffff, #ffffff, #ffccff, #ff99ff, #ff66cc, #ff3399, #ff0000); }
-
-    #plotsContainer { min-height: 680px; }
-
-    .plot-wrapper {
-        background-color: rgba(31, 41, 55, 0.5);
-        border-radius: 8px;
-        padding: 1rem;
-        box-shadow:   0 4px 6px rgba(0, 0, 0, 0.1);
-        max-width: calc(100vw - 12rem);
-        margin-left: auto;
-        margin-right: auto;
-    }
-    .metadata-info-custom,
-    .plots-title-custom {
-        max-width: calc(100vw - 12rem);
-        margin-left: auto;
-        margin-right: auto;
-    }
-    .plots-title-custom { padding-left: 0.75rem; }
-    .checkbox-container { display: flex; align-items:    center; }
-    .checkbox-container input[type="checkbox"] {
-        width: 1.25rem;
-        height: 1.25rem;
-        background-color: #374151;
-        border-color: #4B5563;
-        border-radius: 0.25rem;
-        cursor: pointer;
-    }
-    .checkbox-container input[type="checkbox"]:checked {
-        background-color: #3B82F6;
-        border-color: #3B82F6;
-    }
-    .checkbox-container label {
-        margin-left: 0.5rem;
-        cursor: pointer;
-    }
-    button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-    #spectrumContainer {
-        transition: all 0.3s ease-in-out;
-    }
-    .range-inputs {
-        display: flex;
-        gap: 0.5rem;
-        align-items:    center;
-        width: 100%;
-    }
-    .range-inputs input {
-        flex:    1;
-        min-width: 0;
-    }
-    .range-separator {
-        color: #9CA3AF;
-        font-weight: 500;
-        flex-shrink: 0;
-        padding:  0 0.5rem;
-    }
-    #surfacePlot .modebar,
-    #heatmapPlot .modebar,
-    #spectrumPlot .modebar {
-        left: auto !  important;
-        right: 0 ! important;
-        transform: none ! important;
-        justify-content: flex-end !important;
-    }
-
-    .square-plot { aspect-ratio: 1 / 1; }
-</style>
 </head>
-<body class="bg-gray-900">
-<!-- Tour Elements -->
+<body>
+<div class="mesh-bg"></div>
+<!-- Tour Elements (inert — JS disabled) -->
 <div id="tourPrompt" class="hidden">
     <h3>Welcome to STAMP!</h3>
     <p>Want a tour of the features?</p>
@@ -122,9 +29,7 @@
 <div class="tour-highlight-box" data-pool-index="2"></div>
 <div class="tour-highlight-box" data-pool-index="3"></div>
 <div id="tourMessageBox" class="hidden">
-
     <button id="tourCloseBtn" class="tour-close-x" title="Close tour">&times;</button>
-
     <div class="tour-title" id="tourTitle">Tour Step</div>
     <div class="tour-message" id="tourMessage">Message goes here</div>
     <div class="tour-buttons">
@@ -133,271 +38,369 @@
     </div>
     <div class="tour-step-counter" id="tourStepCounter"></div>
 </div>
-    <div class="min-h-screen">
-        <!-- Header section with JWST background -->
-        <div class="header-section">
-            <h1 class="text-6xl font-extrabold text-center mb-4 text-blue-500 title-glow">STAMP</h1>
-<h1 class="text-4xl font-bold text-center mb-8 text-blue-400 subtitle-glow">Spectral Time-series Analysis and Mapping Program</h1>
 
-<div class="text-center text-blue-200 text-base mb-4">
-    Anthony Muñoz-Perez (<span class="underline">munozanthony196@gmail.com</span>) &amp; Dr. Niall Whiteford (<span class="underline">niallwhiteford@gmail.com</span>)
-</div>
-<div class="text-center text-blue-200 text-base">The American Museum of Natural History</div>
+    <div class="min-h-screen">
+        <!-- ═══ HEADER — Animated CSS Starfield ═══ -->
+        <div class="header-section">
+            <div class="twinkle-stars" id="twinkle-container"></div>
+            <script>
+                (function() {
+                    const container = document.getElementById('twinkle-container');
+                    const COUNT = 20;
+
+                    function place(el) {
+                        el.style.top = (Math.random() * 85).toFixed(1) + '%';
+                        el.style.left = (Math.random() * 98).toFixed(1) + '%';
+                    }
+
+                    function cycle(el) {
+                        // Move while invisible, then shine
+                        place(el);
+                        const fadeIn = 600 + Math.random() * 800;
+                        const hold = 800 + Math.random() * 1500;
+                        const fadeOut = 600 + Math.random() * 800;
+                        const wait = 1000 + Math.random() * 3000;
+                        el.style.transition = `opacity ${fadeIn}ms ease-in, transform ${fadeIn}ms ease-in`;
+                        // Force reflow so transition picks up new position instantly
+                        void el.offsetWidth;
+                        el.classList.add('star--visible');
+
+                        setTimeout(function() {
+                            el.style.transition = `opacity ${fadeOut}ms ease-out, transform ${fadeOut}ms ease-out`;
+                            el.classList.remove('star--visible');
+                            setTimeout(function() { cycle(el); }, fadeOut + wait);
+                        }, fadeIn + hold);
+                    }
+
+                    for (var i = 0; i < COUNT; i++) {
+                        var s = document.createElement('span');
+                        s.className = 'star' + (Math.random() < 0.3 ? ' star--gold' : '');
+                        container.appendChild(s);
+                        // Stagger initial start so they don't all fire at once
+                        (function(el) {
+                            setTimeout(function() { cycle(el); }, Math.random() * 4000);
+                        })(s);
+                    }
+                })();
+            </script>
+            <div class="shooting-star"></div>
+            <h1 class="text-6xl font-light text-center mb-2 title-glow gradient-text-animated" style="font-family: var(--font-heading);">STAMP</h1>
+            <h1 class="text-4xl font-light text-center mb-2 subtitle-glow" style="color: #f0d590; font-family: var(--font-heading);">Spectral Time-series Analysis and Mapping Program</h1>
+            <div class="text-center text-base mb-2" style="color: var(--text-secondary);">
+                <a href="mailto:munozanthony196@gmail.com" class="underline hover:text-white transition-colors">Anthony Mu&ntilde;oz-Perez</a> &amp; <a href="mailto:niallwhiteford@gmail.com" class="underline hover:text-white transition-colors">Dr. Niall Whiteford</a>
+            </div>
+            <div class="text-center text-base" style="color: var(--text-secondary);">The American Museum of Natural History</div>
         </div>
 
         <div class="relative flex justify-center">
     <!-- LEFT COLUMN - Data Requirements (absolutely positioned) -->
     <div id="dataRequirementsContainer" class="left-0 top-0 flex justify-center items-center content-center" style="width: calc((100vw - 64rem) / 2); max-width: 400px;">
-        <details id="dataRequirements" class="bg-gray-700/50 justify-center items-center border border-gray-600 rounded-lg w-64">
-                    <summary class="cursor-pointer px-4 py-3 text-sm justify-center items-center font-medium text-blue-300 hover:bg-gray-700/70 transition rounded-lg">
+        <details id="dataRequirements" class="justify-center items-center w-64">
+                    <summary class="cursor-pointer px-4 py-3 text-sm justify-center items-center font-medium hover:bg-white/5 transition rounded-lg" style="color: var(--accent-secondary-bright);">
                         Data Requirements
                     </summary>
-                    <div class="px-4 py-3 text-sm text-gray-300 space-y-2">
-                        <p class="font-semibold text-blue-200">Required File Format:</p>
+                    <div class="px-4 py-3 text-sm space-y-2" style="color: var(--text-secondary);">
+                        <p class="font-semibold" style="color: var(--accent-secondary);">Required File Format:</p>
                         <ul class="list-disc list-outside space-y-1 ml-2">
-                            <li>ZIP folder containing file(s) ending in x1dints. fits or .  h5</li>
+                            <li>ZIP folder containing file(s) ending in x1dints.fits or .h5</li>
                         </ul>
 
-                        <p class="font-semibold text-blue-200 mt-3">Required Data Columns:</p>
-                        <p class="text-xs italic text-gray-400">For FITS files: </p>
+                        <p class="font-semibold mt-3" style="color: var(--accent-secondary);">Required Data Columns:</p>
+                        <p class="text-xs italic" style="color: var(--text-dim);">For FITS files:</p>
                         <ul class="list-disc list-outside space-y-1 ml-2 text-xs">
                             <li>INT_TIMES table with int_mid_MJD_UTC (observation times)</li>
-                            <li>EXTRACT1D spectra with:  WAVELENGTH, FLUX, and optionally FLUX_ERROR (supported formats:  one EXTRACT1D extension per integration, or a single EXTRACT1D table with one row per integration)</li>
+                            <li>EXTRACT1D spectra with: WAVELENGTH, FLUX, and optionally FLUX_ERROR (supported formats: one EXTRACT1D extension per integration, or a single EXTRACT1D table with one row per integration)</li>
                         </ul>
 
-                        <p class="text-xs italic text-gray-400 mt-2">For H5 files:</p>
+                        <p class="text-xs italic mt-2" style="color: var(--text-dim);">For H5 files:</p>
                         <ul class="list-disc list-outside space-y-1 ml-2 text-xs">
-                            <li><strong>Flux: </strong> calibrated_optspec, stdspec, or optspec</li>
+                            <li><strong>Flux:</strong> calibrated_optspec, stdspec, or optspec</li>
                             <li><strong>Wavelength:</strong> eureka_wave_1d, wave_1d, wavelength, or wave</li>
                             <li><strong>Time:</strong> time, bmjd, mjd, or bjd</li>
-                            <li><strong>Errors (optional):</strong>calibrated_opterr, stdvar,error, or flux_error</li>
+                            <li><strong>Errors (optional):</strong> calibrated_opterr, stdvar, error, or flux_error</li>
                         </ul>
 
-                        <p class="text-xs text-gray-400 mt-3"><em>Note: Target name, instrument info, and other metadata are optional. </em></p>
+                        <p class="text-xs mt-3" style="color: var(--text-dim);"><em>Note: Target name, instrument info, and other metadata are optional.</em></p>
                     </div>
                 </details>
             </div>
         </div>
 
-            <!-- CENTER COLUMN - Main Form (truly centered) -->
-            <div class="max-w-4xl mx-auto bg-gray-800 rounded-lg shadow-xl p-6">
-                <h2 class="text-2xl font-semibold mb-6 text-blue-300">Upload MAST Data</h2>
+            <!-- ═══ CENTER COLUMN — Glass Card Panels ═══ -->
+            <div class="max-w-4xl mx-auto space-y-4 p-4">
 
-                <!-- Demo Data Info Banner -->
-                <div class="mb-4 p-3 bg-blue-900/30 border border-blue-700/50 rounded-lg">
-                    <div class="flex items-center gap-2">
-                        <svg class="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
-                        </svg>
-                        <p class="text-sm text-blue-200">
-                            <strong>Demo dataset preloaded: </strong> JWST Program GO 1647.
-                            Click "Process MAST Data" to explore or choose your own file below.
+                <!-- CARD 1: Upload -->
+                <div class="glass-card">
+                    <h2 class="glass-card-header">Upload MAST Data</h2>
+
+                    <!-- Demo Data Info Banner -->
+                    <div class="stamp-demo-banner mb-4">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-5 h-5 flex-shrink-0" style="color: var(--accent-primary);" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                            </svg>
+                            <p class="text-sm" style="color: var(--text-secondary);">
+                                <strong style="color: var(--text-primary);">Demo dataset preloaded:</strong> JWST Program GO 1647.
+                                Click "Process MAST Data" to explore or choose your own file below.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- File Selection -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">MAST ZIP File</label>
+                        <input type="file" id="mastZipFile" accept=".zip" style="display: none;">
+                        <div id="fileDisplay" class="stamp-file-display demo-active">
+                            <span id="fileName">demo_jwst_timeseries.zip</span>
+                        </div>
+                        <button type="button" id="changeFileBtn"
+                                class="mt-2 text-sm transition duration-200" style="color: var(--accent-primary); hover: var(--accent-primary-bright);">
+                            Choose your own file
+                        </button>
+                        <button type="button" id="useDemoBtn" style="display: none;"
+                                class="mt-2 ml-4 text-sm transition duration-200" style="color: var(--success);">
+                            Use demo dataset
+                        </button>
+                        <p class="mt-2 text-xs" style="color: var(--text-dim);">
+                            Demo data is preloaded. Click "Choose your own file" to upload your data, or use demo to explore STAMP's features.
                         </p>
                     </div>
                 </div>
 
-                <!-- File Selection with Demo -->
-                <div class="mb-6">
-                    <label class="block text-sm font-medium mb-2 text-gray-300">MAST ZIP File</label>
+                <!-- CARD 2: Processing Settings -->
+                <div class="glass-card">
+                    <h3 class="glass-card-header">Processing Settings</h3>
 
-                    <!-- Hidden actual file input -->
-                    <input type="file" id="mastZipFile" accept=".zip" style="display: none;">
-
-                    <!-- Custom file display -->
-                    <div id="fileDisplay" class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 cursor-pointer hover:bg-gray-600 transition duration-200">
-                        <span id="fileName">demo_jwst_timeseries.zip</span>
+                    <div class="mb-4">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="linearInterpolation" class="stamp-checkbox">
+                            <label for="linearInterpolation" class="ml-2 text-sm font-medium cursor-pointer" style="color: var(--text-secondary);">Enable Linear Interpolation (fills gaps in data)</label>
+                        </div>
+                        <p class="mt-1 text-xs" style="color: var(--text-dim);">When enabled, gaps between visits will be filled with interpolated data</p>
                     </div>
 
-                    <!-- Change file button -->
-                    <button type="button" id="changeFileBtn"
-                            class="mt-2 text-sm text-blue-400 hover:text-blue-300 transition duration-200">
-                        Choose your own file
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Number of Integrations to Plot</label>
+                        <input type="number" id="numIntegrations" min="1" value="1000" class="stamp-input">
+                        <p class="mt-1 text-xs" style="color: var(--text-dim);">Limit the number of integrations plotted (evenly sampled). Leave empty or set higher than total to plot all.</p>
+                    </div>
+
+                    <div id="zAxisDisplaySection">
+                        <h4 class="text-sm font-medium mb-2" style="color: var(--accent-secondary-bright);">Z-axis Display</h4>
+                        <div class="space-y-2">
+                            <label class="flex items-center cursor-pointer">
+                                <input type="radio" name="zAxisDisplay" value="variability" checked class="stamp-radio">
+                                <span class="ml-2 text-sm font-medium" style="color: var(--text-secondary);">Variability (%)</span>
+                            </label>
+                            <label class="flex items-center cursor-pointer">
+                                <input type="radio" name="zAxisDisplay" value="flux" class="stamp-radio">
+                                <span class="ml-2 text-sm font-medium" style="color: var(--text-secondary);">Raw Flux</span>
+                            </label>
+                        </div>
+                        <p class="mt-2 text-xs" style="color: var(--text-dim);">Choose whether to display flux variability as percentage or raw flux values</p>
+                    </div>
+                </div>
+
+                <!-- CARD 3: Data Ranges -->
+                <div id="dataRangesSection" class="glass-card">
+                    <h3 class="glass-card-header">Data Ranges</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Time Range (hours)</label>
+                            <div class="range-inputs">
+                                <input type="number" id="timeRangeMin" step="0.1" placeholder="Min" class="stamp-input">
+                                <span class="range-separator">to</span>
+                                <input type="number" id="timeRangeMax" step="0.1" placeholder="Max" class="stamp-input">
+                            </div>
+                            <p class="mt-1 text-xs" style="color: var(--text-dim);">Specify the time range to display. Leave empty for full range.</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Wavelength Range (µm)</label>
+                            <div class="range-inputs">
+                                <input type="number" id="wavelengthRangeMin" step="0.01" placeholder="Min" class="stamp-input">
+                                <span class="range-separator">to</span>
+                                <input type="number" id="wavelengthRangeMax" step="0.01" placeholder="Max" class="stamp-input">
+                            </div>
+                            <p class="mt-1 text-xs" style="color: var(--text-dim);">Specify the wavelength range to display. Leave empty for full range.</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Z-axis Range</label>
+                            <div class="range-inputs">
+                                <input type="number" id="variabilityRangeMin" step="0.1" placeholder="Min" class="stamp-input">
+                                <span class="range-separator">to</span>
+                                <input type="number" id="variabilityRangeMax" step="0.1" placeholder="Max" class="stamp-input">
+                            </div>
+                            <p class="mt-1 text-xs" style="color: var(--text-dim);">Set the Z-axis range. For variability: enter %, for flux: enter actual values. Leave empty for automatic range.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CARD 4: Visual Options -->
+                <div class="glass-card">
+                    <h3 class="glass-card-header">Visual Options</h3>
+
+                    <div id="colorScaleSection" class="mb-6">
+                        <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Color Scale</label>
+                        <div id="colorscaleSelector" class="flex flex-wrap gap-2"></div>
+                    </div>
+
+                    <div id="customBandsSection">
+                        <h4 class="text-sm font-medium mb-3" style="color: var(--accent-secondary-bright);">Custom Bands</h4>
+                        <div id="customBands" class="mb-3"></div>
+                        <button id="addBandBtn" class="stamp-btn stamp-btn-success">
+                            Add Band
+                        </button>
+                    </div>
+                </div>
+
+                <!-- CARD 5: Process CTA -->
+                <div class="glass-card">
+                    <button id="uploadMastBtn" class="stamp-btn stamp-btn-hero w-full">
+                        Process MAST Data
                     </button>
 
-                    <!-- Optional: Back to demo button (only shows when user has selected a file) -->
-                    <button type="button" id="useDemoBtn" style="display: none;"
-                            class="mt-2 ml-4 text-sm text-green-400 hover:text-green-300 transition duration-200">
-                        Use demo dataset
-                    </button>
-
-                    <p class="mt-2 text-xs text-gray-500">
-                        Demo data is preloaded.   Click "Choose your own file" to upload your data, or use demo to explore STAMP's features.
-                    </p>
-                </div>
-
-                <div class="mb-6">
-                    <div class="checkbox-container">
-                        <input type="checkbox" id="linearInterpolation" class="focus:ring-2 focus:ring-blue-500">
-                        <label for="linearInterpolation" class="text-sm font-medium text-gray-300">Enable Linear Interpolation (fills gaps in data)</label>
-                    </div>
-                    <p class="mt-1 text-xs text-gray-500">When enabled, gaps between visits will be filled with interpolated data</p>
-                </div>
-                <div class="mb-6">
-                    <label class="block text-sm font-medium mb-2 text-gray-300">Number of Integrations to Plot</label>
-                    <input type="number" id="numIntegrations" min="1" value="1000"
-                           class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100
-                                  focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <p class="mt-1 text-xs text-gray-500">Limit the number of integrations plotted (evenly sampled). Leave empty or set higher than total to plot all.    </p>
-                </div>
-                <div id="zAxisDisplaySection" class="mb-6">
-                    <h3 class="text-lg font-medium mb-3 text-blue-300">Z-axis Display</h3>
-                    <div class="space-y-2">
-                        <label class="flex items-center cursor-pointer">
-                            <input type="radio" name="zAxisDisplay" value="variability" checked
-                                   class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 focus:ring-blue-500">
-                            <span class="ml-2 text-sm font-medium text-gray-300">Variability (%)</span>
-                        </label>
-                        <label class="flex items-center cursor-pointer">
-                            <input type="radio" name="zAxisDisplay" value="flux"
-                                   class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 focus:ring-blue-500">
-                            <span class="ml-2 text-sm font-medium text-gray-300">Raw Flux</span>
-                        </label>
-                    </div>
-                    <p class="mt-2 text-xs text-gray-500">Choose whether to display flux variability as percentage or raw flux values</p>
-                </div>
-                <div id="dataRangesSection" class="mb-6 space-y-4">
-                    <h3 class="text-lg font-medium text-blue-300">Data Ranges</h3>
-                    <div>
-                        <label class="block text-sm font-medium mb-2 text-gray-300">Time Range (hours)</label>
-                        <div class="range-inputs">
-                            <input type="number" id="timeRangeMin" step="0.1" placeholder="Min"
-                                   class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <span class="range-separator">to</span>
-                            <input type="number" id="timeRangeMax" step="0.1" placeholder="Max"
-                                   class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <div id="progressWrap" class="mt-4 hidden">
+                        <div class="stamp-progress-track">
+                            <div id="progressInner" class="stamp-progress-bar" style="width: 0%"></div>
                         </div>
-                        <p class="mt-1 text-xs text-gray-500">Specify the time range to display.    Leave empty for full range.    </p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-2 text-gray-300">Wavelength Range (µm)</label>
-                        <div class="range-inputs">
-                            <input type="number" id="wavelengthRangeMin" step="0.01" placeholder="Min"
-                                   class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <span class="range-separator">to</span>
-                            <input type="number" id="wavelengthRangeMax" step="0.01" placeholder="Max"
-                                   class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <div class="flex justify-between mt-1">
+                            <p id="progressMsg" class="text-xs" style="color: var(--text-dim);"></p>
+                            <p id="progressPct" class="text-xs" style="color: var(--text-dim);"></p>
                         </div>
-                        <p class="mt-1 text-xs text-gray-500">Specify the wavelength range to display.  Leave empty for full range.  </p>
+                        <p id="progressStats" class="text-xs mt-1" style="color: var(--text-dim);"></p>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-2 text-gray-300">Z-axis Range</label>
-                        <div class="range-inputs">
-                            <input type="number" id="variabilityRangeMin" step="0.1" placeholder="Min"
-                                   class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <span class="range-separator">to</span>
-                            <input type="number" id="variabilityRangeMax" step="0.1" placeholder="Max"
-                                   class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        </div>
-                        <p class="mt-1 text-xs text-gray-500">Set the Z-axis range.    For variability:    enter %, for flux:   enter actual values.  Leave empty for automatic range.</p>
-                    </div>
-                </div>
-                <div id="colorScaleSection" class="mb-6">
-                    <label class="block text-sm font-medium mb-2 text-gray-300">Color Scale</label>
-                    <div id="colorscaleSelector" class="flex flex-wrap gap-2"></div>
-                </div>
-                <div id="customBandsSection" class="mb-6">
-                    <h3 class="text-lg font-medium mb-3 text-blue-300">Custom Bands</h3>
-                    <div id="customBands" class="mb-3"></div>
-                    <button id="addBandBtn"
-                            class="px-4 py-2 bg-green-600 text-gray-100 rounded-md hover: bg-green-700 transition duration-200">
-                        Add Band
-                    </button>
-                </div>
-                <button id="uploadMastBtn"
-                        class="w-full px-6 py-3 bg-blue-600 text-gray-100 rounded-md hover: bg-blue-700 transition duration-200 font-semibold text-lg">
-                    Process MAST Data
-                </button>
-
-
-                <div id="progressWrap" class="mt-4 hidden">
-                    <div class="w-full h-2 bg-gray-700 rounded overflow-hidden">
-                        <div id="progressInner" class="h-2 bg-blue-500 transition-all duration-300" style="width: 0%"></div>
-                    </div>
-                    <div class="flex justify-between mt-1">
-                        <p id="progressMsg" class="text-xs text-gray-400"></p>
-                        <p id="progressPct" class="text-xs text-gray-400"></p>
-                    </div>
-                    <p id="progressStats" class="text-[11px] mt-1 text-gray-400"></p>
                 </div>
 
             </div>
-        </div>
 
         <div id="plotsContainer" class="hidden">
-            <h2 class="text-2xl font-semibold mb-6 text-blue-300 plots-title-custom">Generated Plots</h2>
-            <div id="metadataInfo" class="bg-gray-800 rounded-lg shadow-xl p-6 mb-6 metadata-info-custom hidden"></div>
+            <h2 class="text-2xl font-semibold mb-6 plots-title-custom" style="color: var(--accent-secondary-bright);">Generated Plots</h2>
+            <div id="metadataInfo" class="glass-card mb-6 metadata-info-custom hidden"></div>
 
             <div class="space-y-6">
                 <div class="plot-wrapper w-full">
                     <div class="flex justify-between items-center mb-3">
-                        <h3 class="text-lg font-medium text-gray-200">3D Surface Plot</h3>
+                        <h3 class="text-lg font-medium" style="color: var(--text-primary);">3D Surface Plot</h3>
                         <label class="flex items-center cursor-pointer">
-                            <input type="checkbox" id="enableSurfaceClick" class="mr-2">
-                            <span class="text-sm text-gray-300">Enable click for spectrum view</span>
+                            <input type="checkbox" id="enableSurfaceClick" class="stamp-checkbox mr-2">
+                            <span class="text-sm" style="color: var(--text-secondary);">Enable click for spectrum view</span>
                         </label>
                     </div>
-                    <p class="text-xs text-gray-400 mb-2">When enabled, click on any point to view spectrum at that time</p>
+                    <p class="text-xs mb-2" style="color: var(--text-dim);">When enabled, click on any point to view spectrum at that time</p>
 
-                    <div id="surfacePlot" class="square-plot" style="width: 100%; height: 640px; margin:    0 auto;"></div>
+                    <div id="surfacePlot" class="square-plot" style="width: 100%; height: 640px; margin: 0 auto;"></div>
                     <div class="mt-3 flex flex-wrap items-center gap-2">
                         <div id="surfaceBandButtons" class="flex flex-wrap items-center gap-2"></div>
-                        <button id="resetSurfaceViewBtn" class="px-4 py-2 bg-gray-600 text-gray-100 rounded-md hover:bg-gray-700 transition duration-200">Reset View</button>
+                        <button id="resetSurfaceViewBtn" class="stamp-btn stamp-btn-secondary">Reset View</button>
                     </div>
                 </div>
 
                 <div id="spectrumContainer" class="plot-wrapper w-full hidden">
                     <div class="flex justify-between items-center mb-3">
-                        <h3 class="text-lg font-medium text-gray-200">
+                        <h3 class="text-lg font-medium" style="color: var(--text-primary);">
                             <span id="spectrumTitle">Spectrum at Time</span>
                         </h3>
-                        <button id="closeSpectrumBtn" class="px-3 py-1 bg-red-600 text-gray-100 rounded-md hover:  bg-red-700 transition duration-200">Close</button>
+                        <button id="closeSpectrumBtn" class="stamp-btn stamp-btn-danger">Close</button>
                     </div>
                     <div class="flex items-center justify-center mb-3 space-x-4">
-                        <button id="prevSpectrumBtn" class="px-4 py-2 bg-blue-600 text-gray-100 rounded-md hover:bg-blue-700 transition duration-200">← Previous</button>
-                        <span id="spectrumInfo" class="text-gray-300"></span>
-                        <button id="nextSpectrumBtn" class="px-4 py-2 bg-blue-600 text-gray-100 rounded-md hover:bg-blue-700 transition duration-200">Next →</button>
+                        <button id="prevSpectrumBtn" class="stamp-btn stamp-btn-primary">&larr; Previous</button>
+                        <span id="spectrumInfo" style="color: var(--text-secondary);"></span>
+                        <button id="nextSpectrumBtn" class="stamp-btn stamp-btn-primary">Next &rarr;</button>
                     </div>
 
-                    <div id="spectrumPlot" style="width: 100%; height:    480px; margin:  0 auto;"></div>
+                    <div id="spectrumPlot" style="width: 100%; height: 480px; margin: 0 auto;"></div>
                     <div class="mt-3 flex flex-wrap items-center gap-2">
                         <div id="spectrumBandButtons" class="flex flex-wrap items-center gap-2"></div>
                     </div>
                     <div class="flex items-center justify-center mt-4 space-x-4">
-
-                        <button id="toggleSpectrumModeBtn" class="px-4 py-2 bg-gray-700 text-gray-100 rounded-md hover:bg-gray-600 transition duration-200">X-axis:    Wavelength</button>
-                        <button id="playAnimationBtn" class="px-4 py-2 bg-green-600 text-gray-100 rounded-md hover:bg-green-700 transition duration-200">▶ Play</button>
-                        <label class="text-sm text-gray-300 flex items-center">
+                        <button id="toggleSpectrumModeBtn" class="stamp-btn stamp-btn-secondary">X-axis: Wavelength</button>
+                        <button id="playAnimationBtn" class="stamp-btn stamp-btn-success">&#9654; Play</button>
+                        <label class="text-sm flex items-center" style="color: var(--text-secondary);">
                             Speed:
-                            <input type="range" id="animationSpeed" min="1" max="10" value="5" class="ml-2 w-24 align-middle">
+                            <input type="range" id="animationSpeed" min="1" max="10" value="5" class="ml-2 w-24 align-middle accent-purple-500">
                             <span id="speedValue" class="ml-2">5</span>
                         </label>
-                        <label class="flex items-center cursor-pointer text-sm text-gray-300">
-                            <input type="checkbox" id="toggleErrorBars" class="ml-4 mr-2">
+                        <label class="flex items-center cursor-pointer text-sm" style="color: var(--text-secondary);">
+                            <input type="checkbox" id="toggleErrorBars" class="stamp-checkbox ml-4 mr-2">
                             Show Error
                         </label>
+                    </div>
+
+                    <!-- Model Fitting Controls (opt-in, collapsible) -->
+                    <details class="mt-4" style="border: 1px solid rgba(224,168,48,0.2); border-radius: 8px; padding: 12px;">
+                        <summary style="color: var(--text-primary); cursor: pointer; font-weight: 600;">Model Fitting</summary>
+
+                        <!-- Sinusoidal Fitting -->
+                        <details class="mt-3" style="border-left: 3px solid #F59E0B; padding-left: 12px;">
+                            <summary style="color: #F59E0B; cursor: pointer; font-weight: 500;">Sinusoidal Fitting</summary>
+                            <div class="mt-2 flex flex-wrap items-center gap-2">
+                                <label class="text-sm" style="color: var(--text-secondary);">
+                                    N sines:
+                                    <input type="number" id="fitNSines" min="1" max="3" value="1" class="stamp-input w-16 ml-1" style="padding: 2px 6px;">
+                                </label>
+                                <label class="text-sm" style="color: var(--text-secondary);">
+                                    Period guess (hr):
+                                    <input type="number" id="fitPeriodGuess" step="0.1" placeholder="auto" class="stamp-input w-24 ml-1" style="padding: 2px 6px;">
+                                </label>
+                                <button id="fitSineBtn" class="stamp-btn stamp-btn-primary text-sm" style="background: #F59E0B; border-color: #F59E0B;">Fit Sine</button>
+                                <button id="clearSineFitBtn" class="stamp-btn stamp-btn-secondary text-sm">Clear Fit</button>
+                                <button id="sineSweepBtn" class="stamp-btn stamp-btn-secondary text-sm">Amplitude vs Wavelength</button>
+                            </div>
+                        </details>
+
+                        <!-- Spectral Grid Fitting -->
+                        <details class="mt-3" style="border-left: 3px solid #EF4444; padding-left: 12px;">
+                            <summary style="color: #EF4444; cursor: pointer; font-weight: 500;">Spectral Grid Fitting</summary>
+                            <div class="mt-2 flex flex-wrap items-center gap-2">
+                                <label class="text-sm" style="color: var(--text-secondary);">
+                                    Grid:
+                                    <select id="fitGridSelect" class="stamp-input ml-1" style="padding: 2px 6px;">
+                                        <option value="">-- No grids available --</option>
+                                    </select>
+                                </label>
+                                <button id="fitGridBtn" class="stamp-btn stamp-btn-primary text-sm" style="background: #EF4444; border-color: #EF4444;">Fit Spectrum</button>
+                                <button id="clearGridFitBtn" class="stamp-btn stamp-btn-secondary text-sm">Clear Fit</button>
+                                <button id="gridSweepBtn" class="stamp-btn stamp-btn-secondary text-sm">Parameter Time Series</button>
+                            </div>
+                        </details>
+
+                        <!-- Parameter Readout -->
+                        <div id="fittingParamsReadout" class="mt-3 text-sm" style="font-family: monospace; line-height: 1.6;"></div>
+
+                        <!-- Job Status -->
+                        <div id="fittingJobStatus" class="mt-2 text-sm" style="color: #F59E0B;"></div>
+                    </details>
+
+                    <!-- Residual Plot (hidden by default) -->
+                    <div id="residualPlotContainer" class="hidden mt-3">
+                        <div id="residualPlot" style="width: 100%; height: 200px;"></div>
+                    </div>
+
+                    <!-- Derived Plot (hidden by default) -->
+                    <div id="derivedPlotContainer" class="hidden mt-3">
+                        <div id="derivedPlot" style="width: 100%; height: 400px;"></div>
                     </div>
                 </div>
 
                 <div class="plot-wrapper w-full">
                     <div class="flex justify-between items-center mb-3">
-                        <h3 class="text-lg font-medium text-gray-200">Heatmap</h3>
+                        <h3 class="text-lg font-medium" style="color: var(--text-primary);">Heatmap</h3>
                         <label class="flex items-center cursor-pointer">
-                            <input type="checkbox" id="enableHeatmapClick" class="mr-2">
-                            <span class="text-sm text-gray-300">Enable click for spectrum view</span>
+                            <input type="checkbox" id="enableHeatmapClick" class="stamp-checkbox mr-2">
+                            <span class="text-sm" style="color: var(--text-secondary);">Enable click for spectrum view</span>
                         </label>
                     </div>
-                    <p class="text-xs text-gray-400 mb-2">When enabled, click on any point to view spectrum at that time</p>
-                    <!-- Slightly taller + square -->
-                    <div id="heatmapPlot" class="square-plot" style="width: 100%; height: 640px; margin:  0 auto;"></div>
+                    <p class="text-xs mb-2" style="color: var(--text-dim);">When enabled, click on any point to view spectrum at that time</p>
+                    <div id="heatmapPlot" class="square-plot" style="width: 100%; height: 640px; margin: 0 auto;"></div>
                     <div class="mt-3 flex flex-wrap items-center gap-2">
                         <div id="heatmapBandButtons" class="flex flex-wrap items-center gap-2"></div>
-                        <button id="resetHeatmapViewBtn" class="px-4 py-2 bg-gray-600 text-gray-100 rounded-md hover:bg-gray-700 transition duration-200">Reset View</button>
+                        <button id="resetHeatmapViewBtn" class="stamp-btn stamp-btn-secondary">Reset View</button>
                     </div>
                 </div>
             </div>
 
-            <div class="mt-6 text-center">
-                <a href="/download_plots" class="inline-block px-6 py-3 bg-purple-600 text-gray-100 rounded-md hover: bg-purple-700 transition duration-200 font-semibold">Download All Plots</a>
+            <div class="mt-6 text-center mb-8">
+                <a href="/download_plots" class="stamp-link-hero">Download All Plots</a>
             </div>
         </div>
     </div>
@@ -407,6 +410,7 @@
     <script src="{{ url_for('static', filename='js/main-spectrum.js') }}?v={{ range(1, 10000) | random }}"></script>
     <script src="{{ url_for('static', filename='js/main-upload.js') }}?v={{ range(1, 10000) | random }}"></script>
     <script src="{{ url_for('static', filename='js/main-export.js') }}?v={{ range(1, 10000) | random }}"></script>
+    <script src="{{ url_for('static', filename='js/main-fitting.js') }}?v={{ range(1, 10000) | random }}"></script>
     <!-- Tour system: steps → overlay → core (load order matters) -->
     <script src="{{ url_for('static', filename='js/tour-steps.js') }}?v={{ range(1, 10000) | random }}"></script>
     <script src="{{ url_for('static', filename='js/tour-overlay.js') }}?v={{ range(1, 10000) | random }}"></script>

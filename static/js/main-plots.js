@@ -25,9 +25,9 @@ function updateBandButtonStates() {
   document.querySelectorAll('#surfaceBandButtons [data-band-id], #heatmapBandButtons [data-band-id], #spectrumBandButtons [data-band-id]').forEach(btn => {
     const isActive = activeIds.includes(btn.dataset.bandId) || (btn.dataset.bandId === '__full__' && activeBands.length === 0);
     if (isActive) {
-      btn.classList.add('ring-2', 'ring-blue-500');
+      btn.classList.add('stamp-band-active');
     } else {
-      btn.classList.remove('ring-2', 'ring-blue-500');
+      btn.classList.remove('stamp-band-active');
     }
   });
 }
@@ -43,14 +43,14 @@ function renderBandButtons() {
     c.innerHTML = '';
     const fullBtn = document.createElement('button');
     fullBtn.textContent = 'Full Spectrum';
-    fullBtn.className = 'px-3 py-2 bg-gray-600 text-gray-100 rounded-md hover:bg-gray-700 transition duration-200';
+    fullBtn.className = 'stamp-btn stamp-btn-secondary';
     fullBtn.dataset.bandId = '__full__';
     fullBtn.addEventListener('click', () => setActiveBand(null));
     c.appendChild(fullBtn);
     bands.forEach(b => {
       const btn = document.createElement('button');
       btn.textContent = b.name;
-      btn.className = 'px-3 py-2 bg-gray-700 text-gray-100 rounded-md hover:bg-gray-600 transition duration-200';
+      btn.className = 'stamp-btn stamp-btn-secondary';
       btn.dataset.bandId = b.id;
       btn.addEventListener('click', () => setActiveBand(b));
       c.appendChild(btn);
@@ -479,12 +479,12 @@ function addCustomBand(name = '', start = '', end = '') {
   bandContainer.className = 'flex items-center space-x-2 mb-2';
   bandContainer.innerHTML = `
     <input type="text" placeholder="Band Name" value="${name}"
-           class="flex-grow px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+           class="flex-grow stamp-input" />
     <input type="number" step="0.01" placeholder="Start" value="${start}"
-           class="w-24 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+           class="w-24 stamp-input" />
     <input type="number" step="0.01" placeholder="End" value="${end}"
-           class="w-24 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-    <button class="px-3 py-2 bg-red-600 text-gray-100 rounded-md hover:bg-red-700 transition duration-200">Remove</button>
+           class="w-24 stamp-input" />
+    <button class="stamp-btn stamp-btn-danger">Remove</button>
   `;
   document.getElementById('customBands').appendChild(bandContainer);
   bandContainer.querySelector('button').addEventListener('click', () => {

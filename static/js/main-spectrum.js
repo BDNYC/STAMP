@@ -266,12 +266,45 @@ function showSpectrumAtTime(clickData, plotDiv) {
     refSpec = wlIndicesUsed.map(i => refSpec[i]);
   }
 
+  // Build raw flux/error arrays for model fitting (always physical units)
+  let rawFlux = Array.isArray(window.__rawFluxData) ? window.__rawFluxData.map(row => row.slice()) : null;
+  let rawErr = Array.isArray(window.__rawErrorData) ? window.__rawErrorData.map(row => row.slice()) : null;
+  let rawWl = Array.isArray(window.__rawWavelengths) ? window.__rawWavelengths.slice() : null;
+  let rawTime = Array.isArray(window.__rawTime) ? window.__rawTime.slice() : null;
+
+  // Apply the same range filters to raw data
+  if (rawFlux && wlIndicesUsed && wlIndicesUsed.length > 0) {
+    rawFlux = wlIndicesUsed.map(i => rawFlux[i]);
+    if (rawErr) rawErr = wlIndicesUsed.map(i => rawErr[i]);
+    if (rawWl) rawWl = wlIndicesUsed.map(i => rawWl[i]);
+  }
+  if (rawFlux && rawTime) {
+    const ranges2 = window.__userRanges || {};
+    if (ranges2.timeRangeMin || ranges2.timeRangeMax) {
+      const tMin = ranges2.timeRangeMin ? parseFloat(ranges2.timeRangeMin) : -Infinity;
+      const tMax = ranges2.timeRangeMax ? parseFloat(ranges2.timeRangeMax) : Infinity;
+      const tIdx = [];
+      for (let i = 0; i < rawTime.length; i++) {
+        if (rawTime[i] >= tMin && rawTime[i] <= tMax) tIdx.push(i);
+      }
+      if (tIdx.length > 0) {
+        rawTime = tIdx.map(i => rawTime[i]);
+        rawFlux = rawFlux.map(row => tIdx.map(i => row[i]));
+        if (rawErr) rawErr = rawErr.map(row => tIdx.map(i => row[i]));
+      }
+    }
+  }
+
   // 6. Assemble spectrum data object
   currentSpectrumData = {
     wavelengthData,
     timeData,
     fluxData,
     errorData: errData,
+    rawFluxData: rawFlux,
+    rawErrorData: rawErr,
+    rawWavelengths: rawWl,
+    rawTime: rawTime,
     plotType: mainTrace.type,
     clickedTime: timeData[timeIndex],
     useInterpolation: document.getElementById('linearInterpolation').checked,
@@ -376,11 +409,11 @@ function updateSpectrumPlot() {
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor: 'rgba(0,0,0,0)',
     font: { color: '#ffffff' },
-    xaxis: { title: xAxisTitle, gridcolor: '#555555', linecolor: '#555555', zeroline: false },
+    xaxis: { title: xAxisTitle, gridcolor: 'rgba(74,144,217,0.12)', linecolor: 'rgba(74,144,217,0.12)', zeroline: false },
     yaxis: {
       title: yAxisLabel,
-      gridcolor: '#555555',
-      linecolor: '#555555',
+      gridcolor: 'rgba(74,144,217,0.12)',
+      linecolor: 'rgba(74,144,217,0.12)',
       zeroline: false,
       range: currentSpectrumData.lockedRibbonRange ?  currentSpectrumData.lockedRibbonRange : [currentSpectrumData.globalMin, currentSpectrumData.globalMax],
       tickformat: yTickFormat
@@ -424,7 +457,7 @@ function updateSpectrumPlot() {
         y: inY,
         type: 'scatter',
         mode: 'lines',
-        line: { color: '#3B82F6', width: 2 },
+        line: { color: '#4A90D9', width: 2 },
         name: 'In',
         hovertemplate: `Wavelength: %{x:.4f} um<br>${yAxisLabel}: %{y: ${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ? ' %' : ''}<extra></extra>`
       };
@@ -466,7 +499,7 @@ function updateSpectrumPlot() {
         y:  values,
         type: 'scatter',
         mode: 'lines',
-        line: { color: '#3B82F6', width: 2 },
+        line: { color: '#4A90D9', width: 2 },
         name: 'Spectrum',
         hovertemplate: `Wavelength: %{x:.4f} um<br>${yAxisLabel}: %{y:${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ? ' %' : ''}<extra></extra>`
       };
@@ -505,7 +538,7 @@ function updateSpectrumPlot() {
         segs.push([s, timeArray.length - 1]);
       }
 
-      const bandColors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#06B6D4', '#E11D48', '#22C55E', '#A855F7', '#F97316'];
+      const bandColors = ['#4A90D9', '#EF4444', '#10B981', '#F59E0B', '#5BA3EC', '#E11D48', '#22C55E', '#A855F7', '#94A3B8', '#F97316'];
 
       /** Convert hex color to rgba string. */
       function hexToRgba(hex, a) {
@@ -707,7 +740,7 @@ function updateSpectrumPlot() {
             y: ySeg,
             type: 'scatter',
             mode: 'lines',
-            line: { color: '#3B82F6', width: 2 },
+            line: { color: '#4A90D9', width: 2 },
             name: 'Series',
             hovertemplate: `Time: %{x:.4f} hr<br>${yAxisLabel}: %{y:${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ?  ' %' : ''}<extra></extra>`,
             connectgaps: false,
@@ -731,7 +764,7 @@ function updateSpectrumPlot() {
           y: values,
           type:  'scatter',
           mode:  'lines',
-          line:  { color: '#3B82F6', width: 2 },
+          line:  { color: '#4A90D9', width: 2 },
           name: 'Series',
           hovertemplate:  `Time: %{x:.4f} hr<br>${yAxisLabel}: %{y:${hoverFormat}}${currentSpectrumData.zAxisDisplay === 'variability' ? ' %' :  ''}<extra></extra>`
         };
@@ -778,6 +811,15 @@ function updateSpectrumPlot() {
     document.getElementById('nextSpectrumBtn').disabled = currentWavelengthIndex >= totalWavelengthPoints - 1;
     document.getElementById('playAnimationBtn').disabled = false;
   }
+
+  // Re-apply fit overlays after Plotly.newPlot completes
+  setTimeout(() => {
+    if ((showSineFitOverlay && lastSineFitResult) || (showGridFitOverlay && lastGridFitResult)) {
+      if (typeof applyFitOverlays === 'function') {
+        applyFitOverlays();
+      }
+    }
+  }, 0);
 }
 
 // Spectrum Navigation

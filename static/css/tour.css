@@ -7,7 +7,7 @@
     top: 50%;
     transform: translateY(-50%);
     background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-    border: 2px solid #3b82f6;
+    border: 2px solid #d4952a;
     border-radius: 12px;
     padding: 16px;
     width: 240px;
@@ -24,7 +24,7 @@
 }
 
 #tourPrompt h3 {
-    color: #60a5fa;
+    color: #f0d590;
     font-size: 18px;
     font-weight: 600;
     margin: 0 0 12px 0;
@@ -54,12 +54,12 @@
 }
 
 #tourAcceptBtn {
-    background: #3b82f6;
+    background: #d4952a;
     color: white;
 }
 
 #tourAcceptBtn:hover {
-    background: #2563eb;
+    background: #c99225;
     transform: translateY(-2px);
 }
 
@@ -79,7 +79,7 @@
     top: 50%;
     transform: translateY(-50%);
     background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-    border: 2px solid #3b82f6;
+    border: 2px solid #d4952a;
     border-radius: 12px;
     padding: 24px;
     width: 280px;
@@ -128,7 +128,7 @@
 }
 
 #tourMessageBox .tour-title {
-    color: #60a5fa;
+    color: #f0d590;
     font-size: 16px;
     font-weight: 600;
     margin: 0 0 12px 0;
@@ -159,12 +159,12 @@
 }
 
 #tourNextBtn {
-    background: #3b82f6;
+    background: #d4952a;
     color: white;
 }
 
 #tourNextBtn:hover {
-    background: #2563eb;
+    background: #c99225;
     transform: translateY(-2px);
 }
 
@@ -224,7 +224,7 @@
         0 0 40px rgba(255, 255, 255, 0.5);
     background: transparent;
     pointer-events: none;
-    z-index: 9999 !important;
+    z-index: 9997 !important;
     opacity: 0;
     transition:
         top 0.35s cubic-bezier(0.4, 0, 0.2, 1),
@@ -248,7 +248,7 @@
     box-shadow:
         0 0 25px rgba(255, 255, 255, 1),
         0 0 50px rgba(255, 255, 255, 0.7),
-        0 0 80px rgba(59, 130, 246, 0.4);
+        0 0 80px rgba(224, 168, 48, 0.4);
     animation: pulseGlowAccent 1.5s ease-in-out infinite;
 }
 
@@ -257,13 +257,13 @@
         box-shadow:
             0 0 25px rgba(255, 255, 255, 1),
             0 0 50px rgba(255, 255, 255, 0.7),
-            0 0 80px rgba(59, 130, 246, 0.4);
+            0 0 80px rgba(224, 168, 48, 0.4);
     }
     50% {
         box-shadow:
             0 0 35px rgba(255, 255, 255, 1),
             0 0 65px rgba(255, 255, 255, 0.8),
-            0 0 100px rgba(59, 130, 246, 0.6);
+            0 0 100px rgba(224, 168, 48, 0.6);
     }
 }
 
@@ -321,9 +321,9 @@
 }
 
 #restartTourBtn:hover {
-    border-color: #3b82f6;
-    color: #3b82f6;
-    background: rgba(59, 130, 246, 0.1);
+    border-color: #d4952a;
+    color: #d4952a;
+    background: rgba(224, 168, 48, 0.1);
 }
 
 /* Prevent horizontal scrollbar */

@@ -318,8 +318,8 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
     if progress_cb:
         progress_cb(
             regrid_start, "Regridding integrations...", stage="regrid",
-            processed_integrations=processed_count,
-            total_integrations=total_est_integrations,
+            processed_integrations=0,
+            total_integrations=total_integ,
         )
 
     t_start = _time.time()
@@ -351,14 +351,14 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
 
         if progress_cb:
             elapsed = _time.time() - t_start
-            done_total = processed_count + (k + 1)
+            done_total = k + 1
             tp = done_total / elapsed if elapsed > 0 else None
             progress_cb(
                 pct_for_regrid(k + 1),
                 f"Regridding {k + 1}/{total_integ} integrations",
                 stage="regrid",
                 processed_integrations=done_total,
-                total_integrations=total_est_integrations,
+                total_integrations=total_integ,
                 throughput=(tp if tp is not None else None),
             )
 
@@ -404,8 +404,8 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
     if progress_cb:
         progress_cb(
             92.0, "Computing variability & metadata...", stage="finalize",
-            processed_integrations=processed_count + total_integ,
-            total_integrations=total_est_integrations,
+            processed_integrations=total_integ,
+            total_integrations=total_integ,
         )
 
     flux_norm_2d = calculate_variability_from_raw_flux(flux_raw_2d)

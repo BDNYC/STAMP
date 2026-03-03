@@ -23,7 +23,7 @@ function positionDataRequirements() {
   const MIN_LEFT = 16;
 
   // Absolute position in document coordinates (does not follow scroll)
-  const OFFSET_Y = 0;
+  const OFFSET_Y = 16;
   const docTop = Math.round(window.scrollY + mainRect.top + OFFSET_Y);
 
   container.style.position = 'absolute';
@@ -60,52 +60,52 @@ window.addEventListener('DOMContentLoaded', () => {
 function displayMetadata(metadata) {
   const metadataDiv = document.getElementById('metadataInfo');
   let metadataHTML = `
-    <h3 class="text-lg font-medium mb-3 text-blue-300">Data Information</h3>
+    <h3 class="text-lg font-medium mb-3" style="color: var(--accent-secondary-bright);">Data Information</h3>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div>
-        <p class="text-sm text-gray-400">Total Integrations:</p>
+        <p class="text-sm" style="color: var(--text-dim);">Total Integrations:</p>
         <p class="text-lg font-semibold">${metadata.total_integrations}</p>
       </div>
       <div>
-        <p class="text-sm text-gray-400">Files Processed:</p>
+        <p class="text-sm" style="color: var(--text-dim);">Files Processed:</p>
         <p class="text-lg font-semibold">${metadata.files_processed}</p>
       </div>
       <div>
-        <p class="text-sm text-gray-400">Wavelength Range:</p>
+        <p class="text-sm" style="color: var(--text-dim);">Wavelength Range:</p>
         <p class="text-lg font-semibold">${metadata.wavelength_range}</p>
       </div>
       <div>
-        <p class="text-sm text-gray-400">Time Range:</p>
+        <p class="text-sm" style="color: var(--text-dim);">Time Range:</p>
         <p class="text-lg font-semibold">${metadata.time_range}</p>
       </div>
   `;
   if (metadata.targets && metadata.targets.length > 0) {
     metadataHTML += `
       <div>
-        <p class="text-sm text-gray-400">Target(s):</p>
+        <p class="text-sm" style="color: var(--text-dim);">Target(s):</p>
         <p class="text-lg font-semibold">${metadata.targets.join(', ')}</p>
       </div>
     `;
   }
   if (metadata.plotted_integrations && metadata.plotted_integrations < metadata.total_integrations) {
     metadataHTML += `
-      <div class="col-span-2 border-t border-gray-600 pt-2 mt-2">
-        <p class="text-sm text-yellow-400">Showing ${metadata.plotted_integrations} of ${metadata.total_integrations} integrations (evenly sampled)</p>
+      <div class="col-span-2 pt-2 mt-2" style="border-top: 1px solid var(--glass-border);">
+        <p class="text-sm" style="color: var(--warning);">Showing ${metadata.plotted_integrations} of ${metadata.total_integrations} integrations (evenly sampled)</p>
       </div>
     `;
   }
   if (metadata.user_ranges) {
     metadataHTML += `
-      <div class="col-span-2 border-t border-gray-600 pt-2 mt-2">
-        <p class="text-sm text-blue-400">User-specified ranges applied:</p>
-        <p class="text-sm text-gray-300">${metadata.user_ranges}</p>
+      <div class="col-span-2 pt-2 mt-2" style="border-top: 1px solid var(--glass-border);">
+        <p class="text-sm" style="color: var(--accent-primary);">User-specified ranges applied:</p>
+        <p class="text-sm" style="color: var(--text-secondary);">${metadata.user_ranges}</p>
       </div>
     `;
   }
   if (metadata.instruments && metadata.instruments.length > 0) {
     metadataHTML += `
       <div>
-        <p class="text-sm text-gray-400">Instrument(s):</p>
+        <p class="text-sm" style="color: var(--text-dim);">Instrument(s):</p>
         <p class="text-lg font-semibold">${metadata.instruments.join(', ')}</p>
       </div>
     `;
@@ -113,7 +113,7 @@ function displayMetadata(metadata) {
   if (metadata.filters && metadata.filters.length > 0) {
     metadataHTML += `
       <div>
-        <p class="text-sm text-gray-400">Filter(s):</p>
+        <p class="text-sm" style="color: var(--text-dim);">Filter(s):</p>
         <p class="text-lg font-semibold">${metadata.filters.join(', ')}</p>
       </div>
     `;
@@ -121,7 +121,7 @@ function displayMetadata(metadata) {
   if (metadata.gratings && metadata.gratings.length > 0) {
     metadataHTML += `
       <div>
-        <p class="text-sm text-gray-400">Grating(s):</p>
+        <p class="text-sm" style="color: var(--text-dim);">Grating(s):</p>
         <p class="text-lg font-semibold">${metadata.gratings.join(', ')}</p>
       </div>
     `;
@@ -242,6 +242,10 @@ async function uploadMastDirectory() {
   plotOriginal.surfacePlot = null;
   plotOriginal.heatmapPlot = null;
   window.__referenceSpectrum = null;
+  window.__rawFluxData = null;
+  window.__rawErrorData = null;
+  window.__rawWavelengths = null;
+  window.__rawTime = null;
 
   window.__userRanges = {
     timeRangeMin:  timeRangeMin || null,
@@ -313,6 +317,10 @@ async function uploadMastDirectory() {
 
     if (data.metadata) displayMetadata(data.metadata);
     if (data.reference_spectrum) { try { window.__referenceSpectrum = JSON.parse(data.reference_spectrum); } catch(_) { window.__referenceSpectrum = null; } }
+    if (data.raw_flux_2d) { try { window.__rawFluxData = JSON.parse(data.raw_flux_2d); } catch(_) { window.__rawFluxData = null; } }
+    if (data.raw_error_2d) { try { window.__rawErrorData = JSON.parse(data.raw_error_2d); } catch(_) { window.__rawErrorData = null; } }
+    if (data.raw_wavelengths) { try { window.__rawWavelengths = JSON.parse(data.raw_wavelengths); } catch(_) { window.__rawWavelengths = null; } }
+    if (data.raw_time) { try { window.__rawTime = JSON.parse(data.raw_time); } catch(_) { window.__rawTime = null; } }
 
     // 5. Render plots
     const surfaceData = JSON.parse(data.surface_plot);

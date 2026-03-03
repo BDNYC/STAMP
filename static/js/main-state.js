@@ -67,6 +67,26 @@ let currentWavelengthIndex = 0;
 /** @type {number} */
 let totalWavelengthPoints = 0;
 
+// Model Fitting State
+
+/** @type {Object|null} Last sinusoidal fit result */
+let lastSineFitResult = null;
+
+/** @type {Object|null} Last grid fit result */
+let lastGridFitResult = null;
+
+/** @type {boolean} Whether sine fit overlay is active */
+let showSineFitOverlay = false;
+
+/** @type {boolean} Whether grid fit overlay is active */
+let showGridFitOverlay = false;
+
+/** @type {string|null} Job ID for running sine sweep */
+let sineSweepJobId = null;
+
+/** @type {string|null} Job ID for running grid sweep */
+let gridSweepJobId = null;
+
 // Color Scales
 
 /** @type {Array<{name:string, class:string}>} */

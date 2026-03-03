@@ -1,5 +1,27 @@
 /* tour-overlay.js -- Visual Layer (overlay, highlight pool, scroll, positioning) */
 
+/* ── Scroll lock (block user scrolling, allow programmatic) ─────── */
+
+/** Block user-initiated scrolling (wheel, touch, keyboard). */
+var _scrollHandler = function (e) { e.preventDefault(); };
+var _keyScrollHandler = function (e) {
+    // Block Space, Page Up/Down, Home, End, Arrow Up/Down
+    var keys = [32, 33, 34, 35, 36, 38, 40];
+    if (keys.indexOf(e.keyCode) !== -1) e.preventDefault();
+};
+
+function lockScroll() {
+    window.addEventListener('wheel', _scrollHandler, { passive: false });
+    window.addEventListener('touchmove', _scrollHandler, { passive: false });
+    window.addEventListener('keydown', _keyScrollHandler, { passive: false });
+}
+
+function unlockScroll() {
+    window.removeEventListener('wheel', _scrollHandler);
+    window.removeEventListener('touchmove', _scrollHandler);
+    window.removeEventListener('keydown', _keyScrollHandler);
+}
+
 /* ── Overlay control ─────────────────────────────────────────────── */
 
 /** Show the persistent dimming overlay (called once at tour start). */
@@ -94,6 +116,55 @@ function positionHighlights(selectors, opts) {
     for (var i = selectors.length; i < pool.length; i++) {
         pool[i].classList.remove('visible');
     }
+
+    // Cut a hole in the overlay so highlighted content appears at full brightness
+    updateOverlayClipPath(selectors);
+}
+
+/**
+ * Update the overlay's clip-path to cut out the highlighted region so the
+ * content beneath appears at full brightness (not dimmed by the overlay).
+ * Uses evenodd fill: outer rect (full screen) + inner rect = transparent hole.
+ *
+ * @param {string[]} selectors  CSS selectors for highlighted elements
+ */
+function updateOverlayClipPath(selectors) {
+    var overlay = document.getElementById('tourOverlay');
+    if (!overlay) return;
+
+    if (!selectors || selectors.length === 0) {
+        overlay.style.clipPath = '';
+        return;
+    }
+
+    var rects = selectors.map(function (sel) {
+        var el = document.querySelector(sel);
+        return el ? el.getBoundingClientRect() : null;
+    }).filter(Boolean);
+
+    if (rects.length === 0) {
+        overlay.style.clipPath = '';
+        return;
+    }
+
+    // Bounding box of all highlighted elements, with 5px padding to match highlight boxes
+    var pad = 8;
+    var top    = Math.min.apply(null, rects.map(function (r) { return r.top; }))    - pad;
+    var left   = Math.min.apply(null, rects.map(function (r) { return r.left; }))   - pad;
+    var bottom = Math.max.apply(null, rects.map(function (r) { return r.bottom; })) + pad;
+    var right  = Math.max.apply(null, rects.map(function (r) { return r.right; }))  + pad;
+
+    // Non-evenodd polygon: trace outer border, bridge along left edge to
+    // cutout, trace cutout, bridge back, close. No diagonal connecting edges.
+    overlay.style.clipPath = 'polygon(' +
+        '0% 0%, 100% 0%, 100% 100%, 0% 100%, ' +   // outer border CW
+        '0px ' + top + 'px, ' +                       // bridge: down left edge to cutout top
+        left + 'px ' + top + 'px, ' +                 // cutout top-left
+        left + 'px ' + bottom + 'px, ' +              // cutout bottom-left
+        right + 'px ' + bottom + 'px, ' +             // cutout bottom-right
+        right + 'px ' + top + 'px, ' +                // cutout top-right
+        '0px ' + top + 'px, ' +                       // bridge: back to left edge
+        '0% 0%)';
 }
 
 /** Fade out all highlight boxes and remove elevation from elements. */
@@ -106,6 +177,10 @@ function clearHighlights() {
         el.classList.remove('tour-elevated');
         el.style.pointerEvents = '';
     });
+
+    // Remove overlay cutout so it returns to full coverage
+    var overlay = document.getElementById('tourOverlay');
+    if (overlay) overlay.style.clipPath = '';
 }
 
 /* ── Scrolling ───────────────────────────────────────────────────── */

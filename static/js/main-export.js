@@ -168,17 +168,14 @@ function updateFileDisplay() {
   }
 
   if (window.isDemoDataSelected) {
-    fileNameEl.innerHTML = 'demo_jwst_timeseries.zip <span class="text-xs text-blue-400 ml-2">(Demo Dataset)</span>';
-    fileDisplayEl.classList.add('border-blue-500', 'bg-blue-900/20');
-    fileDisplayEl.classList.remove('border-gray-600');
+    fileNameEl.innerHTML = 'demo_jwst_timeseries.zip <span class="text-xs ml-2" style="color: var(--accent-primary);">(Demo Dataset)</span>';
+    fileDisplayEl.classList.add('demo-active');
   } else if (window.selectedFile) {
     fileNameEl.innerHTML = `${window.selectedFile.name}`;
-    fileDisplayEl.classList.remove('border-blue-500', 'bg-blue-900/20');
-    fileDisplayEl.classList.add('border-gray-600');
+    fileDisplayEl.classList.remove('demo-active');
   } else {
     fileNameEl.innerHTML = 'No file selected';
-    fileDisplayEl.classList.remove('border-blue-500', 'bg-blue-900/20');
-    fileDisplayEl.classList.add('border-gray-600');
+    fileDisplayEl.classList.remove('demo-active');
   }
 }
 

@@ -274,6 +274,10 @@ def _run_mast_job(job_id, zip_path, form_args):
             'heatmap_plot': heatmap_plot.to_json(),
             'metadata': metadata,
             'reference_spectrum': json.dumps(ref_spec.tolist()),
+            'raw_flux_2d': json.dumps(np.asarray(flux_raw_2d_filtered).tolist()),
+            'raw_error_2d': json.dumps(np.asarray(error_raw_2d_filtered).tolist()),
+            'raw_wavelengths': json.dumps(np.asarray(wavelength_1d_raw).tolist()),
+            'raw_time': json.dumps(np.asarray(time_1d_raw).tolist()),
         }
 
         with PROG_LOCK:
