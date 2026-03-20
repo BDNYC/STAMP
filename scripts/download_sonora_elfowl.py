@@ -161,6 +161,16 @@ _NC_PATTERNS = [
     ),
 ]
 
+# Pattern for files like: spectra_logzz_9.0_teff_325.0_grav_562.0_mh_0.5_co_1.5.nc
+_GRAV_PATTERN = re.compile(
+    r"logzz[_-]?(\d+(?:\.\d+)?)"
+    r".*teff[_-]?(\d+(?:\.\d+)?)"
+    r".*grav[_-]?(\d+(?:\.\d+)?)"
+    r".*mh[_-]?([+-]?\d+(?:\.\d+)?)"
+    r".*co[_-]?(\d+(?:\.\d+)?)",
+    re.IGNORECASE,
+)
+
 
 def _parse_nc_filename(path):
     """Try to extract (teff, logg, metallicity, c_o_ratio, log_kzz) from
@@ -177,6 +187,20 @@ def _parse_nc_filename(path):
                 "co": float(m.group(4)),
                 "kzz": float(m.group(5)),
             }
+
+    # Try grav-based pattern (grav = surface gravity in CGS, logg = log10(grav))
+    m = _GRAV_PATTERN.search(basename)
+    if m:
+        import math
+        grav = float(m.group(3))
+        logg = math.log10(grav) if grav > 0 else 0.0
+        return {
+            "teff": float(m.group(2)),
+            "logg": round(logg, 2),
+            "metal": float(m.group(4)),
+            "co": float(m.group(5)),
+            "kzz": float(m.group(1)),
+        }
 
     return None
 
