@@ -31,28 +31,23 @@ class DatasetCache:
         logger.info(f"Cache initialized: {self.cache_dir} "
                     f"(TTL: {ttl_hours}h, Max size: {max_cache_size_gb}GB)")
 
+    FINGERPRINT_BYTES = 65536  # 64 KB
+
     def _compute_hash(self, file_path, use_interpolation, num_integrations=None):
-        """Compute a unique hash based on file content and parameters."""
+        """Compute a unique hash based on file content fingerprint and parameters."""
         hasher = hashlib.sha256()
-
-        try:
-            file_size = 0
-            with open(file_path, 'rb') as f:
-                while chunk := f.read(8192):
-                    hasher.update(chunk)
-                    file_size += len(chunk)
-            logger.info(f"Hashing file: {os.path.basename(file_path)} (size: {file_size / 1024 / 1024:.2f} MB)")
-        except Exception as e:
-            logger.error(f"Error hashing file {file_path}: {e}")
-            raise
-
+        file_size = os.path.getsize(file_path)
+        hasher.update(str(file_size).encode())
+        with open(file_path, 'rb') as f:
+            head = f.read(self.FINGERPRINT_BYTES)
+            hasher.update(head)
+            if file_size > self.FINGERPRINT_BYTES * 2:
+                f.seek(-self.FINGERPRINT_BYTES, 2)
+                hasher.update(f.read())
         hasher.update(str(use_interpolation).encode())
-
         cache_key = hasher.hexdigest()
-
         logger.info(f"Cache key: {cache_key[:16]}... | File: {os.path.basename(file_path)} | "
-                    f"Interpolation: {use_interpolation}")
-
+                    f"Size: {file_size / 1024 / 1024:.2f} MB | Interpolation: {use_interpolation}")
         return cache_key
 
     def _get_cache_path(self, cache_key):

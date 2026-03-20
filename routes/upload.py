@@ -273,80 +273,76 @@ def upload_mast():
     This is the original upload endpoint.  For large datasets, prefer
     ``/start_mast`` which processes asynchronously with progress tracking.
     """
+    mast_file = request.files.get('mast_zip')
+    if not mast_file or mast_file.filename == '':
+        return jsonify({'error': 'No MAST zip file provided.'}), 400
+
+    # Parse form parameters
+    custom_bands_json = request.form.get('custom_bands', '[]')
     try:
-        mast_file = request.files.get('mast_zip')
-        if not mast_file or mast_file.filename == '':
-            return jsonify({'error': 'No MAST zip file provided.'}), 400
+        custom_bands = json.loads(custom_bands_json)
+    except json.JSONDecodeError:
+        custom_bands = []
 
-        # Parse form parameters
-        custom_bands_json = request.form.get('custom_bands', '[]')
-        try:
-            custom_bands = json.loads(custom_bands_json)
-        except json.JSONDecodeError:
-            custom_bands = []
+    use_interpolation = request.form.get('use_interpolation', 'false').lower() == 'true'
+    colorscale = request.form.get('colorscale', 'Viridis')
+    num_integrations = int(request.form.get('num_integrations', '0') or 0)
+    z_axis_display = request.form.get('z_axis_display', 'variability')
 
-        use_interpolation = request.form.get('use_interpolation', 'false').lower() == 'true'
-        colorscale = request.form.get('colorscale', 'Viridis')
-        num_integrations = int(request.form.get('num_integrations', '0') or 0)
-        z_axis_display = request.form.get('z_axis_display', 'variability')
+    time_range_min = request.form.get('time_range_min', '')
+    time_range_max = request.form.get('time_range_max', '')
+    wavelength_range_min = request.form.get('wavelength_range_min', '')
+    wavelength_range_max = request.form.get('wavelength_range_max', '')
+    variability_range_min = request.form.get('variability_range_min', '')
+    variability_range_max = request.form.get('variability_range_max', '')
 
-        time_range_min = request.form.get('time_range_min', '')
-        time_range_max = request.form.get('time_range_max', '')
-        wavelength_range_min = request.form.get('wavelength_range_min', '')
-        wavelength_range_max = request.form.get('wavelength_range_max', '')
-        variability_range_min = request.form.get('variability_range_min', '')
-        variability_range_max = request.form.get('variability_range_max', '')
+    time_range = None
+    wavelength_range = None
+    variability_range = None
+    if time_range_min or time_range_max:
+        t_min = float(time_range_min) if time_range_min else None
+        t_max = float(time_range_max) if time_range_max else None
+        time_range = (t_min, t_max)
+    if wavelength_range_min or wavelength_range_max:
+        wl_min = float(wavelength_range_min) if wavelength_range_min else None
+        wl_max = float(wavelength_range_max) if wavelength_range_max else None
+        wavelength_range = (wl_min, wl_max)
+    if variability_range_min or variability_range_max:
+        v_min = float(variability_range_min) if variability_range_min else None
+        v_max = float(variability_range_max) if variability_range_max else None
+        variability_range = (v_min, v_max)
 
-        time_range = None
-        wavelength_range = None
-        variability_range = None
-        if time_range_min or time_range_max:
-            t_min = float(time_range_min) if time_range_min else None
-            t_max = float(time_range_max) if time_range_max else None
-            time_range = (t_min, t_max)
-        if wavelength_range_min or wavelength_range_max:
-            wl_min = float(wavelength_range_min) if wavelength_range_min else None
-            wl_max = float(wavelength_range_max) if wavelength_range_max else None
-            wavelength_range = (wl_min, wl_max)
-        if variability_range_min or variability_range_max:
-            v_min = float(variability_range_min) if variability_range_min else None
-            v_max = float(variability_range_max) if variability_range_max else None
-            variability_range = (v_min, v_max)
+    # Extract, process, and plot — temp_dir always cleaned up via finally
+    temp_dir = tempfile.mkdtemp()
+    try:
+        zip_path = os.path.join(temp_dir, 'mast.zip')
+        mast_file.save(zip_path)
 
-        # Extract and sort files
-        temp_dir = tempfile.mkdtemp()
-        try:
-            zip_path = os.path.join(temp_dir, 'mast.zip')
-            mast_file.save(zip_path)
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
 
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(temp_dir)
+        fits_files = []
+        for root, _, files in os.walk(temp_dir):
+            for f in files:
+                if f.lower().endswith(('.fits', '.h5')):
+                    fits_files.append(os.path.join(root, f))
 
-            fits_files = []
-            for root, _, files in os.walk(temp_dir):
-                for f in files:
-                    if f.lower().endswith(('.fits', '.h5')):
-                        fits_files.append(os.path.join(root, f))
-
-            file_times = []
-            for fp in fits_files:
-                try:
-                    if fp.endswith('.fits'):
-                        with fits.open(fp) as hdul:
-                            t = hdul['INT_TIMES'].data['int_mid_MJD_UTC'][0]
-                    elif fp.endswith('.h5'):
-                        with h5py.File(fp, 'r') as h:
-                            t = float(h['time'][0]) if 'time' in h else None
-                    else:
-                        t = None
-                    if t is not None:
-                        file_times.append((fp, t))
-                except Exception:
-                    continue
-            fits_files_sorted = [fp for fp, _ in sorted(file_times, key=lambda x: x[1])]
-        except Exception as e:
-            shutil.rmtree(temp_dir)
-            return jsonify({'error': 'Error sorting files by observation time.'}), 400
+        file_times = []
+        for fp in fits_files:
+            try:
+                if fp.endswith('.fits'):
+                    with fits.open(fp) as hdul:
+                        t = hdul['INT_TIMES'].data['int_mid_MJD_UTC'][0]
+                elif fp.endswith('.h5'):
+                    with h5py.File(fp, 'r') as h:
+                        t = float(h['time'][0]) if 'time' in h else None
+                else:
+                    t = None
+                if t is not None:
+                    file_times.append((fp, t))
+            except Exception:
+                continue
+        fits_files_sorted = [fp for fp, _ in sorted(file_times, key=lambda x: x[1])]
 
         # Run processing pipeline
         wavelength_1d, flux_norm_2d, flux_raw_2d, time_1d, metadata, error_raw_2d = (
@@ -429,7 +425,6 @@ def upload_mast():
         state.last_heatmap_fig_json = heatmap_plot.to_plotly_json()
         state.last_custom_bands = json.loads(request.form.get('custom_bands', '[]'))
 
-        shutil.rmtree(temp_dir)
         return jsonify({
             'surface_plot': surface_plot.to_json(),
             'heatmap_plot': heatmap_plot.to_json(),
@@ -439,3 +434,5 @@ def upload_mast():
     except Exception as e:
         logger.error(f"Error in upload_mast: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 400
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)

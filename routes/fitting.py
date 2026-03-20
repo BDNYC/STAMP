@@ -9,12 +9,13 @@ import logging
 import numpy as np
 from flask import Blueprint, request, jsonify
 
-from config import BASE_DIR
+from config import GRIDS_DIR
 from state import _progress_set, RESULTS, PROG_LOCK
 from fitting import (
     fit_sinusoidal,
     fit_sinusoidal_all_wavelengths,
     fit_spectrum_to_grid,
+    fit_spectrum_chunked,
     fit_spectrum_all_timesteps,
 )
 from model_grids import load_grid_from_directory, list_available_grids
@@ -22,8 +23,6 @@ from model_grids import load_grid_from_directory, list_available_grids
 logger = logging.getLogger(__name__)
 
 fitting_bp = Blueprint('fitting', __name__)
-
-GRIDS_DIR = os.path.join(BASE_DIR, 'model_grids')
 
 
 @fitting_bp.route('/fit/sinusoidal', methods=['POST'])
@@ -120,6 +119,34 @@ def fit_grid():
 
     except Exception as e:
         logger.error(f"Spectrum fit error: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@fitting_bp.route('/fit/spectrum_chunked', methods=['POST'])
+def fit_grid_chunked():
+    """Fit observed spectrum in wavelength chunks against a model grid."""
+    try:
+        data = request.get_json(force=True)
+        obs_wl = data['wavelengths']
+        obs_flux = data['flux']
+        obs_error = data['error']
+        grid_name = data['grid_name']
+        chunks = data['chunks']
+
+        grid_dir = os.path.join(GRIDS_DIR, grid_name)
+        if not os.path.isdir(grid_dir):
+            return jsonify({"success": False, "error": f"Grid '{grid_name}' not found"}), 404
+
+        grid = load_grid_from_directory(grid_dir)
+        result = fit_spectrum_chunked(
+            obs_wl, obs_flux, obs_error,
+            grid["wavelengths"], grid["spectra"], grid["params"],
+            chunks,
+        )
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Chunked spectrum fit error: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 400
 
 

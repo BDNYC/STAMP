@@ -1,0 +1,6 @@
+model_grids/*/spectra/
+model_grids/*/.cache/
+__pycache__/
+*.pyc
+.DS_Store
+.idea/

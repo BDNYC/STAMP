@@ -89,8 +89,8 @@ async function uploadFramesAndEncode(frames) {
     throw new Error(`Video upload/encode failed: ${msg}`);
   }
   const data = ct.includes('application/json') ? await res.json() : {};
-  if (!data.ok) throw new Error(`Video upload/encode failed: ${data.error || 'unknown error'}`);
-  window.__lastVideoToken = data.token || null;
+  if (!data.success) throw new Error(`Video upload/encode failed: ${data.error || 'unknown error'}`);
+  window.__lastVideoToken = data.video_token || null;
 }
 
 /**

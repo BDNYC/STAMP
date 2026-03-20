@@ -1,5 +1,10 @@
 // main-fitting.js - Model Fitting UI and Overlay Rendering
 
+const CHUNK_COLORS = [
+    '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6',
+    '#EC4899', '#14B8A6', '#F97316', '#6366F1',
+];
+
 /**
  * Extract the current 1D light curve (time series) from spectrum data.
  * Handles both single-wavelength and band-averaged modes.
@@ -72,6 +77,73 @@ function _extractCurrentSpectrum() {
     error.push((errData && errData[i] && errData[i][currentTimeIndex] !== undefined) ? errData[i][currentTimeIndex] : NaN);
   }
   return { wavelengths: Array.from(wavelengths), flux, error };
+}
+
+// ── Chunk Range UI ──
+
+/**
+ * Build chunk wavelength range input rows for N chunks.
+ * @param {number} n - Number of chunks
+ */
+function buildChunkRangeInputs(n) {
+  const container = document.getElementById('chunkRangesContainer');
+  if (!container) return;
+
+  const wavelengths = currentSpectrumData
+    ? (currentSpectrumData.rawWavelengths || currentSpectrumData.wavelengthData)
+    : null;
+  if (!wavelengths || wavelengths.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  const wlMin = wavelengths[0];
+  const wlMax = wavelengths[wavelengths.length - 1];
+  const step = (wlMax - wlMin) / n;
+
+  let html = '';
+  for (let i = 0; i < n; i++) {
+    const color = CHUNK_COLORS[i % CHUNK_COLORS.length];
+    const lo = (wlMin + step * i).toFixed(4);
+    const hi = (wlMin + step * (i + 1)).toFixed(4);
+    html += `<div class="flex items-center gap-2 text-sm" data-chunk="${i}">
+      <span style="color: ${color}; font-size: 1.2em;">&bull;</span>
+      <span style="color: ${color}; font-weight: 500; min-width: 4.5rem;">Chunk ${i + 1}</span>
+      <input type="number" class="stamp-input chunk-wl-min" step="any" value="${lo}"
+             style="padding: 2px 6px; width: 6rem; color: ${color}; border-color: ${color}40;">
+      <span style="color: var(--text-dim);">&ndash;</span>
+      <input type="number" class="stamp-input chunk-wl-max" step="any" value="${hi}"
+             style="padding: 2px 6px; width: 6rem; color: ${color}; border-color: ${color}40;">
+      <span style="color: var(--text-dim);">&mu;m</span>
+    </div>`;
+  }
+  container.innerHTML = html;
+  container.style.display = '';
+}
+
+/**
+ * Read chunk definitions from the UI.
+ * @returns {Array<{min:number, max:number, color:string}>|null} null if single-fit
+ */
+function getChunkDefinitions() {
+  const input = document.getElementById('chunkCountInput');
+  if (!input) return null;
+  const n = parseInt(input.value);
+  if (!n || n <= 1) return null;
+
+  const mins = document.querySelectorAll('.chunk-wl-min');
+  const maxs = document.querySelectorAll('.chunk-wl-max');
+  if (mins.length === 0) return null;
+
+  const chunks = [];
+  for (let i = 0; i < mins.length; i++) {
+    chunks.push({
+      min: parseFloat(mins[i].value),
+      max: parseFloat(maxs[i].value),
+      color: CHUNK_COLORS[i % CHUNK_COLORS.length],
+    });
+  }
+  return chunks;
 }
 
 // ── Sinusoidal Fitting ──
@@ -163,39 +235,81 @@ async function requestGridFit() {
   const statusEl = document.getElementById('fittingJobStatus');
   if (statusEl) statusEl.textContent = 'Fitting against grid...';
 
+  const chunks = getChunkDefinitions();
+
   try {
-    const body = {
-      wavelengths: spectrum.wavelengths,
-      flux: spectrum.flux,
-      error: spectrum.error,
-      grid_name: selectEl.value,
-    };
+    if (chunks) {
+      // ── Chunked fit path ──
+      const body = {
+        wavelengths: spectrum.wavelengths,
+        flux: spectrum.flux,
+        error: spectrum.error,
+        grid_name: selectEl.value,
+        chunks: chunks.map(c => ({ min: c.min, max: c.max })),
+      };
 
-    const resp = await fetch('/fit/spectrum', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const result = await resp.json();
+      const resp = await fetch('/fit/spectrum_chunked', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const result = await resp.json();
 
-    if (!result.success) {
-      alert('Grid fit failed: ' + (result.error || 'Unknown error'));
+      if (!result.success) {
+        alert('Chunked grid fit failed: ' + (result.error || 'Unknown error'));
+        if (statusEl) statusEl.textContent = '';
+        return;
+      }
+
+      // Attach color and label to each chunk result
+      result.chunk_results.forEach((cr, i) => {
+        cr._color = chunks[i].color;
+        cr._label = `Chunk ${i + 1}`;
+      });
+
+      lastChunkedFitResult = result;
+      lastGridFitResult = null;
+      showGridFitOverlay = true;
+      updateFitParameterReadout('grid_chunked', result);
+      updateSpectrumPlot();
+      renderChunkedResidualPlot(result);
       if (statusEl) statusEl.textContent = '';
-      return;
-    }
+    } else {
+      // ── Single fit path (unchanged) ──
+      const body = {
+        wavelengths: spectrum.wavelengths,
+        flux: spectrum.flux,
+        error: spectrum.error,
+        grid_name: selectEl.value,
+      };
 
-    lastGridFitResult = result;
-    showGridFitOverlay = true;
-    updateFitParameterReadout('grid', result);
-    updateSpectrumPlot();
-    renderResidualPlot(
-      result.best_fit_wavelengths,
-      result.residuals,
-      currentSpectrumData ? currentSpectrumData.zAxisDisplay : null,
-      currentSpectrumData ? currentSpectrumData.referenceSpectrum : null,
-      currentSpectrumData ? (currentSpectrumData.rawWavelengths || currentSpectrumData.wavelengthData) : null
-    );
-    if (statusEl) statusEl.textContent = '';
+      const resp = await fetch('/fit/spectrum', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const result = await resp.json();
+
+      if (!result.success) {
+        alert('Grid fit failed: ' + (result.error || 'Unknown error'));
+        if (statusEl) statusEl.textContent = '';
+        return;
+      }
+
+      lastGridFitResult = result;
+      lastChunkedFitResult = null;
+      showGridFitOverlay = true;
+      updateFitParameterReadout('grid', result);
+      updateSpectrumPlot();
+      renderResidualPlot(
+        result.best_fit_wavelengths,
+        result.residuals,
+        currentSpectrumData ? currentSpectrumData.zAxisDisplay : null,
+        currentSpectrumData ? currentSpectrumData.referenceSpectrum : null,
+        currentSpectrumData ? (currentSpectrumData.rawWavelengths || currentSpectrumData.wavelengthData) : null
+      );
+      if (statusEl) statusEl.textContent = '';
+    }
   } catch (e) {
     alert('Grid fit request failed: ' + e.message);
     if (statusEl) statusEl.textContent = '';
@@ -207,6 +321,7 @@ async function requestGridFit() {
  */
 function clearGridFit() {
   lastGridFitResult = null;
+  lastChunkedFitResult = null;
   showGridFitOverlay = false;
   updateSpectrumPlot();
   const residualContainer = document.getElementById('residualPlotContainer');
@@ -377,7 +492,7 @@ function applyFitOverlays() {
     });
   }
 
-  if (showGridFitOverlay && lastGridFitResult && spectrumMode === 'vs_wavelength') {
+  if (showGridFitOverlay && lastGridFitResult && !lastChunkedFitResult && spectrumMode === 'vs_wavelength') {
     const modelWl = lastGridFitResult.best_fit_wavelengths;
     const modelJy = lastGridFitResult.best_fit_spectrum;
     let overlayY = modelJy;
@@ -409,6 +524,47 @@ function applyFitOverlays() {
       name: 'Grid Fit',
       hoverinfo: 'skip',
     });
+  }
+
+  // Chunked grid fit overlays — one colored dashed trace per successful chunk
+  if (showGridFitOverlay && lastChunkedFitResult && spectrumMode === 'vs_wavelength') {
+    const traces = [];
+    const ref = currentSpectrumData ? currentSpectrumData.referenceSpectrum : null;
+    const rawWl = currentSpectrumData ? (currentSpectrumData.rawWavelengths || currentSpectrumData.wavelengthData) : null;
+    const isVariability = currentSpectrumData && currentSpectrumData.zAxisDisplay !== 'flux';
+
+    lastChunkedFitResult.chunk_results.forEach((cr) => {
+      if (!cr.success) return;
+      const modelWl = cr.best_fit_wavelengths;
+      const modelJy = cr.best_fit_spectrum;
+      let overlayY = modelJy;
+
+      if (isVariability && ref && rawWl) {
+        overlayY = modelWl.map((wl, i) => {
+          let bestIdx = 0, bestDist = Math.abs(rawWl[0] - wl);
+          for (let k = 1; k < rawWl.length; k++) {
+            const d = Math.abs(rawWl[k] - wl);
+            if (d < bestDist) { bestDist = d; bestIdx = k; }
+          }
+          const r = ref[bestIdx];
+          return (r && isFinite(r) && r !== 0) ? (modelJy[i] / r - 1) * 100 : NaN;
+        });
+      }
+
+      traces.push({
+        x: modelWl,
+        y: overlayY,
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: cr._color || '#3B82F6', width: 2.5, dash: 'dash' },
+        name: cr._label || 'Chunk',
+        hoverinfo: 'skip',
+      });
+    });
+
+    if (traces.length > 0) {
+      Plotly.addTraces('spectrumPlot', traces);
+    }
   }
 }
 
@@ -461,6 +617,63 @@ function renderResidualPlot(wavelengths, residuals, zAxisDisplay, referenceSpect
   };
 
   Plotly.newPlot('residualPlot', [trace], layout, { responsive: true });
+}
+
+/**
+ * Render residual plot for chunked fit results — one colored trace per chunk.
+ */
+function renderChunkedResidualPlot(result) {
+  const container = document.getElementById('residualPlotContainer');
+  if (!container) return;
+  container.classList.remove('hidden');
+
+  const zAxisDisplay = currentSpectrumData ? currentSpectrumData.zAxisDisplay : null;
+  const ref = currentSpectrumData ? currentSpectrumData.referenceSpectrum : null;
+  const refWl = currentSpectrumData ? (currentSpectrumData.rawWavelengths || currentSpectrumData.wavelengthData) : null;
+  const isVariability = zAxisDisplay && zAxisDisplay !== 'flux' && ref && refWl;
+  const yLabel = isVariability ? 'Residual (%)' : 'Residual (Jy)';
+
+  const traces = [];
+  result.chunk_results.forEach((cr) => {
+    if (!cr.success) return;
+    const wl = cr.best_fit_wavelengths;
+    let plotResiduals = cr.residuals;
+
+    if (isVariability) {
+      plotResiduals = wl.map((w, i) => {
+        let bestIdx = 0, bestDist = Math.abs(refWl[0] - w);
+        for (let k = 1; k < refWl.length; k++) {
+          const d = Math.abs(refWl[k] - w);
+          if (d < bestDist) { bestDist = d; bestIdx = k; }
+        }
+        const r = ref[bestIdx];
+        return (r && isFinite(r) && r !== 0) ? (cr.residuals[i] / r) * 100 : NaN;
+      });
+    }
+
+    traces.push({
+      x: wl,
+      y: plotResiduals,
+      type: 'scatter',
+      mode: 'lines',
+      line: { color: cr._color || '#3B82F6', width: 1.5 },
+      name: cr._label || 'Chunk',
+    });
+  });
+
+  const layout = {
+    template: 'plotly_dark',
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#ffffff' },
+    xaxis: { title: 'Wavelength (um)', gridcolor: 'rgba(74,144,217,0.12)' },
+    yaxis: { title: yLabel, gridcolor: 'rgba(74,144,217,0.12)', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.3)' },
+    margin: { l: 60, r: 40, t: 20, b: 40 },
+    height: 200,
+    showlegend: traces.length > 1,
+  };
+
+  Plotly.newPlot('residualPlot', traces, layout, { responsive: true });
 }
 
 /**
@@ -602,17 +815,24 @@ function updateFitParameterReadout(type, result) {
     if (result.n_data_points != null) {
       html += `<br><span style="color: var(--text-dim);">N = ${result.n_data_points}, median SNR = ${result.median_snr != null ? result.median_snr.toFixed(1) : '—'}</span>`;
     }
-    const chi = result.reduced_chi_squared;
-    if (result.quality_note) {
-      const color = chi < 2 ? '#22c55e' : chi < 10 ? '#eab308' : '#f97316';
-      html += `<br><span style="color: ${color}; font-weight: 600;">${result.quality_note}</span>`;
-    } else if (chi < 2) {
-      html += `<br><span style="color: #22c55e; font-weight: 600;">Excellent fit</span>`;
-    } else if (chi < 10) {
-      html += `<br><span style="color: #eab308; font-weight: 600;">Good fit</span>`;
-    } else {
-      html += `<br><span style="color: #f97316; font-weight: 600;">Poor shape match — model may not capture this object's atmosphere</span>`;
-    }
+    el.innerHTML = html;
+  } else if (type === 'grid_chunked') {
+    const chunks = result.chunk_results;
+    let html = `<span style="color: #EF4444; font-weight: 600;">Grid Fit (${chunks.length} chunks)</span><br>`;
+    chunks.forEach((cr) => {
+      const color = cr._color || '#3B82F6';
+      const label = cr._label || 'Chunk';
+      if (!cr.success) {
+        html += `<span style="color: ${color};">&bull; ${label} [${cr._wl_min.toFixed(3)}&ndash;${cr._wl_max.toFixed(3)} &mu;m]: ${cr.error || 'Failed'}</span><br>`;
+        return;
+      }
+      html += `<span style="color: ${color}; font-weight: 500;">&bull; ${label} [${cr._wl_min.toFixed(3)}&ndash;${cr._wl_max.toFixed(3)} &mu;m]</span><br>`;
+      const params = cr.best_fit_params;
+      for (const [k, v] of Object.entries(params)) {
+        html += `<span style="color: var(--text-secondary); margin-left: 1rem;">${k}: ${typeof v === 'number' ? v.toFixed(2) : v}</span><br>`;
+      }
+      html += `<span style="color: var(--text-dim); margin-left: 1rem;">&chi;&sup2;_red = ${cr.reduced_chi_squared.toFixed(3)}, scale = ${cr.scaling_factor.toExponential(4)}</span><br>`;
+    });
     el.innerHTML = html;
   }
 }
@@ -671,4 +891,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const gridSweepBtn = document.getElementById('gridSweepBtn');
   if (gridSweepBtn) gridSweepBtn.addEventListener('click', requestGridSweep);
+
+  // Chunk count input — build range rows when > 1
+  const chunkInput = document.getElementById('chunkCountInput');
+  if (chunkInput) {
+    chunkInput.addEventListener('input', function() {
+      const n = parseInt(this.value);
+      const container = document.getElementById('chunkRangesContainer');
+      if (n > 1) {
+        buildChunkRangeInputs(n);
+      } else if (container) {
+        container.style.display = 'none';
+      }
+    });
+  }
 });

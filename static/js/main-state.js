@@ -87,6 +87,12 @@ let sineSweepJobId = null;
 /** @type {string|null} Job ID for running grid sweep */
 let gridSweepJobId = null;
 
+/** @type {Object|null} Last chunked fit result */
+let lastChunkedFitResult = null;
+
+/** @type {Object|null} Last multi-component fit result */
+let lastMultiComponentFitResult = null;
+
 // Color Scales
 
 /** @type {Array<{name:string, class:string}>} */

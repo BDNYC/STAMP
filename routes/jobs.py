@@ -223,10 +223,14 @@ def _run_mast_job(job_id, zip_path, form_args):
         ref_spec = np.nanmedian(np.asarray(flux_raw_2d_filtered), axis=1)
 
         # Stage 7: Plot
+        with PROG_LOCK:
+            prev = PROGRESS.get(job_id, {})
+            pi = prev.get("processed_integrations", 0)
+            ti = prev.get("total_integrations", None)
         _progress_set(
             job_id, percent=96.0, message="Rendering plots…", stage="finalize",
-            processed_integrations=_progress_set(job_id)["processed_integrations"],
-            total_integrations=_progress_set(job_id)["total_integrations"],
+            processed_integrations=pi,
+            total_integrations=ti,
         )
 
         surface_plot = create_surface_plot_with_visits(

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 COLOR_SCALES = [
     'Viridis', 'Plasma', 'Inferno', 'Magma', 'Cividis',
-    'Turbo', 'Viridis', 'Spectral', 'RdYlBu', 'Picnic',
+    'Turbo', 'Hot', 'Spectral', 'RdYlBu', 'Picnic',
 ]
 
 
@@ -31,9 +31,10 @@ def load_config(config_file='config.yaml'):
         with open(cfg_path, 'r') as f:
             return yaml.safe_load(f) or {}
     except Exception as e:
-        logger.warning(f"Error loading configuration: {str(e)}.Using default values.")
+        logger.warning(f"Error loading configuration: {str(e)}. Using default values.")
         return {}
 
 
 CONFIG = load_config()
 DATA_DIR = CONFIG.get('data_dir', 'Data')
+GRIDS_DIR = os.environ.get('GRIDS_DIR', os.path.join(BASE_DIR, 'model_grids'))

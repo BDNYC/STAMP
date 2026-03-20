@@ -90,7 +90,11 @@ def process_data(flux, wavelength, time, num_plots, apply_binning=True,
         logger.info(f'Calculated bin size: {bin_size}')
         if bin_size > 1 and apply_binning:
             flux = bin_flux_arr(flux, bin_size)
-            time = time[::bin_size]
+            n_bins = flux.shape[1]
+            bin_edges = np.linspace(0, len(time), n_bins + 1)
+            bin_centers = ((bin_edges[:-1] + bin_edges[1:]) / 2).astype(int)
+            bin_centers = np.clip(bin_centers, 0, len(time) - 1)
+            time = time[bin_centers]
             logger.info('Shape after binning: %s', flux.shape)
 
         flux = smooth_flux(flux, sigma=smooth_sigma)
@@ -300,7 +304,11 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
             f"No wavelength overlap between files (min={min_wl:.4f}, max={max_wl:.4f}). "
             "Ensure all files cover a common wavelength range."
         )
-    n_wave = 1000
+    native_counts = [len(integ['wavelength']) for integ in all_integrations]
+    n_wave = int(np.median(native_counts))
+    n_wave = max(200, min(5000, n_wave))
+    logger.info(f"Adaptive wavelength grid: {n_wave} points "
+                f"(native median: {int(np.median(native_counts))})")
     common_wl = np.linspace(min_wl, max_wl, n_wave)
 
     flux_raw_list = []
@@ -350,16 +358,12 @@ def process_mast_files_with_gaps(file_paths, use_interpolation=False,
         times.append(t)
 
         if progress_cb:
-            elapsed = _time.time() - t_start
-            done_total = k + 1
-            tp = done_total / elapsed if elapsed > 0 else None
             progress_cb(
                 pct_for_regrid(k + 1),
                 f"Regridding {k + 1}/{total_integ} integrations",
                 stage="regrid",
-                processed_integrations=done_total,
+                processed_integrations=k + 1,
                 total_integrations=total_integ,
-                throughput=(tp if tp is not None else None),
             )
 
     flux_raw_2d = np.array(flux_raw_list).T

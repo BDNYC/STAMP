@@ -57,6 +57,7 @@ more-itertools==10.7.0
 munkres==1.1.4
 mypy_extensions==1.1.0
 nest-asyncio==1.6.0
+netCDF4==1.7.2
 numexpr==2.11.0
 numpy==2.2.1
 openpyxl==3.0.10
@@ -114,4 +115,5 @@ wcwidth==0.2.13
 webencodings==0.5.1
 Werkzeug==3.0.6
 widgetsnbextension==4.0.14
+xarray==2024.10.0
 zipp==3.23.0

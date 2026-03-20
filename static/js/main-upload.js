@@ -155,7 +155,7 @@ function showProgress(message) {
  * Update the progress bar width, message, and stats text.
  * @param {number} pct - Progress percentage (0-100).
  * @param {string|null} message - Status message.
- * @param {string} statsText - Additional stats line (throughput, ETA).
+ * @param {string} statsText - Additional stats line (integration count).
  */
 function updateProgress(pct, message, statsText) {
   const wrap = document.getElementById('progressWrap');
@@ -287,7 +287,6 @@ async function uploadMastDirectory() {
           let main = isCacheHit ? 'Loaded from cache' : (stageLabel ? `${stageLabel} -- ${baseMsg}` : baseMsg);
           let stats = '';
           if (tot && proc != null) stats += `${proc}/${tot} integrations`;
-          if (p.throughput && isFinite(p.throughput)) stats += (stats ? ' | ' : '') + `${p.throughput.toFixed(1)}/s`;
           updateProgress(p.percent || 0, main, stats);
           if (p.status === 'done') {
             updateProgress(100, 'Finalizing...', stats);

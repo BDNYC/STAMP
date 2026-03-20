@@ -41,7 +41,7 @@ def apply_data_ranges(wavelength, flux, time, wavelength_range=None,
         wl_max = min(wl_max, original_wl_range[1])
         if wl_min >= wl_max:
             logger.warning(
-                f"Invalid wavelength range: {wl_min} to {wl_max}.Using full range."
+                f"Invalid wavelength range: {wl_min} to {wl_max}. Using full range."
             )
             wl_mask = np.ones(len(wavelength), dtype=bool)
         else:
@@ -61,7 +61,7 @@ def apply_data_ranges(wavelength, flux, time, wavelength_range=None,
         time_max = min(time_max, original_time_range[1])
         if time_min >= time_max:
             logger.warning(
-                f"Invalid time range: {time_min} to {time_max}.Using full range."
+                f"Invalid time range: {time_min} to {time_max}. Using full range."
             )
             time_mask = np.ones(len(time), dtype=bool)
         else:

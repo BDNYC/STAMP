@@ -36,7 +36,7 @@ video_tmp_paths = {}
 
 def _progress_set(job_id, *, percent=None, message=None, status=None,
                   reset=False, stage=None, processed_integrations=None,
-                  total_integrations=None, throughput=None, eta_seconds=None):
+                  total_integrations=None):
     """Create or update a background-job progress record (thread-safe).
     Returns a snapshot copy of the record.
     """
@@ -46,13 +46,11 @@ def _progress_set(job_id, *, percent=None, message=None, status=None,
             rec = {
                 "status": "running",
                 "percent": 0.0,
-                "eta_seconds": None,
                 "message": "Starting",
                 "started_at": _time.time(),
                 "stage": "queued",
                 "processed_integrations": 0,
                 "total_integrations": None,
-                "throughput": None,
             }
             PROGRESS[job_id] = rec
 
@@ -61,18 +59,6 @@ def _progress_set(job_id, *, percent=None, message=None, status=None,
             if status != "done":
                 p = max(0.0, min(99.0, p))
             rec["percent"] = p
-
-            frac = p / 100.0
-            if eta_seconds is not None:
-                rec["eta_seconds"] = int(eta_seconds)
-            else:
-                if 0.0 < frac < 1.0:
-                    elapsed = _time.time() - rec["started_at"]
-                    rec["eta_seconds"] = int(
-                        max(0.0, elapsed * (1.0 - frac) / max(1e-6, frac))
-                    )
-                else:
-                    rec["eta_seconds"] = None
 
         if message is not None:
             rec["message"] = message
@@ -84,7 +70,27 @@ def _progress_set(job_id, *, percent=None, message=None, status=None,
             rec["processed_integrations"] = int(processed_integrations)
         if total_integrations is not None:
             rec["total_integrations"] = int(total_integrations)
-        if throughput is not None:
-            rec["throughput"] = float(throughput)
+
+        if status == "done":
+            _cleanup_old_jobs()
 
         return rec.copy()
+
+
+_MAX_JOB_AGE = 3600  # 1 hour
+
+
+def _cleanup_old_jobs():
+    """Remove completed/errored jobs older than _MAX_JOB_AGE seconds.
+
+    Must be called while PROG_LOCK is held.
+    """
+    now = _time.time()
+    stale = [
+        jid for jid, rec in PROGRESS.items()
+        if rec.get("status") in ("done", "error")
+        and now - rec.get("started_at", now) > _MAX_JOB_AGE
+    ]
+    for jid in stale:
+        PROGRESS.pop(jid, None)
+        RESULTS.pop(jid, None)

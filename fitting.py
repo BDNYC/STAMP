@@ -156,19 +156,6 @@ def fit_sinusoidal_all_wavelengths(wavelength_arr, time_arr, flux_2d, error_2d=N
         return {"success": False, "error": str(exc)}
 
 
-def _quality_note(reduced_chi_sq, n_points, median_snr):
-    """Return a human-readable interpretation of the reduced chi-squared value."""
-    if reduced_chi_sq < 2.0:
-        return "Good fit"
-    elif reduced_chi_sq < 10.0:
-        return "Moderate — model captures overall shape but misses fine features"
-    elif median_snr > 50:
-        return ("High — likely underestimated errors or missing model physics "
-                "(common with JWST pipeline uncertainties)")
-    else:
-        return "High — may be low SNR data or model mismatch"
-
-
 def fit_spectrum_to_grid(obs_wl, obs_flux, obs_error, grid_wl, grid_spectra, grid_params):
     """Fit an observed spectrum against a model grid using chi-squared minimization.
 
@@ -192,31 +179,31 @@ def fit_spectrum_to_grid(obs_wl, obs_flux, obs_error, grid_wl, grid_spectra, gri
         spectra = np.asarray(grid_spectra, dtype=float)  # (N_models, W_grid)
         n_models = spectra.shape[0]
 
-        best_chi = np.inf
-        best_idx = -1
-        best_scale = 1.0
-        all_chi = np.full(n_models, np.inf)
+        # Batch-interpolate all models onto observed wavelength grid
+        models_interp = np.array([
+            np.interp(wl_obs, wl_grid, spectra[m])
+            for m in range(n_models)
+        ])  # shape: (n_models, n_obs)
 
-        for m in range(n_models):
-            # Interpolate model onto observed wavelength grid
-            model_interp = np.interp(wl_obs, wl_grid, spectra[m])
+        # Compute optimal scaling factors for all models at once
+        inv_var = 1.0 / e_obs**2                          # (n_obs,)
+        num = models_interp @ (f_obs * inv_var)            # (n_models,)
+        den = models_interp**2 @ inv_var                   # (n_models,)
 
-            # Optimal scaling factor
-            num = np.sum(f_obs * model_interp / e_obs ** 2)
-            den = np.sum(model_interp ** 2 / e_obs ** 2)
-            if den <= 0:
-                continue
-            scale = num / den
-            scaled = scale * model_interp
-            chi = float(np.sum(((f_obs - scaled) / e_obs) ** 2))
-            all_chi[m] = chi
+        valid = den > 0
+        scales = np.where(valid, num / den, 0.0)           # (n_models,)
 
-            if chi < best_chi:
-                best_chi = chi
-                best_idx = m
-                best_scale = scale
+        # Compute chi-squared for all models at once
+        scaled_models = scales[:, None] * models_interp    # (n_models, n_obs)
+        residuals_all = f_obs[None, :] - scaled_models     # (n_models, n_obs)
+        all_chi = np.sum((residuals_all / e_obs[None, :])**2, axis=1)  # (n_models,)
+        all_chi[~valid] = np.inf
 
-        if best_idx < 0:
+        best_idx = int(np.argmin(all_chi))
+        best_chi = float(all_chi[best_idx])
+        best_scale = float(scales[best_idx])
+
+        if best_idx < 0 or not np.isfinite(best_chi):
             return {"success": False, "error": "No valid model fits found"}
 
         # Get best fit spectrum on observed grid
@@ -234,31 +221,12 @@ def fit_spectrum_to_grid(obs_wl, obs_flux, obs_error, grid_wl, grid_spectra, gri
                     "chi_squared": float(all_chi[idx]),
                 })
 
-        # Check if best-fit Teff is at the grid boundary
-        warnings = []
         best_params = grid_params[best_idx] if best_idx < len(grid_params) else {}
-        if best_params and "Teff" in best_params:
-            all_teffs = [p["Teff"] for p in grid_params if "Teff" in p]
-            if all_teffs:
-                grid_teff_min = min(all_teffs)
-                grid_teff_max = max(all_teffs)
-                if best_params["Teff"] <= grid_teff_min:
-                    warnings.append(
-                        f"Best-fit Teff ({best_params['Teff']:.0f} K) is at the grid "
-                        f"lower boundary — true Teff may be below {grid_teff_min:.0f} K. "
-                        f"Consider using a grid with cooler models."
-                    )
-                elif best_params["Teff"] >= grid_teff_max:
-                    warnings.append(
-                        f"Best-fit Teff ({best_params['Teff']:.0f} K) is at the grid "
-                        f"upper boundary — true Teff may be above {grid_teff_max:.0f} K. "
-                        f"Consider using a grid with hotter models."
-                    )
 
         reduced_chi_sq = float(best_chi / max(1, len(wl_obs) - 1))
         median_snr = float(np.median(f_obs / e_obs))
 
-        result = {
+        return {
             "success": True,
             "best_fit_params": best_params,
             "best_fit_spectrum": best_fit.tolist(),
@@ -270,11 +238,60 @@ def fit_spectrum_to_grid(obs_wl, obs_flux, obs_error, grid_wl, grid_spectra, gri
             "top_5": top_5,
             "n_data_points": len(wl_obs),
             "median_snr": median_snr,
-            "quality_note": _quality_note(reduced_chi_sq, len(wl_obs), median_snr),
         }
-        if warnings:
-            result["warnings"] = warnings
-        return result
+
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def fit_spectrum_chunked(obs_wl, obs_flux, obs_error, grid_wl, grid_spectra, grid_params, chunks):
+    """Fit observed spectrum in wavelength chunks against a model grid.
+
+    Each chunk defines a wavelength range; data is masked to that range and
+    fit_spectrum_to_grid is called independently per chunk.
+
+    Parameters
+    ----------
+    obs_wl, obs_flux, obs_error : array-like
+        Observed wavelengths, flux, and errors.
+    grid_wl, grid_spectra, grid_params : array-like / list
+        Model grid data (passed through to fit_spectrum_to_grid).
+    chunks : list of dict
+        Each dict has 'min' and 'max' keys (wavelength bounds).
+
+    Returns
+    -------
+    dict with 'success' and 'chunk_results' (list of per-chunk result dicts).
+    """
+    try:
+        wl = np.asarray(obs_wl, dtype=float)
+        flux = np.asarray(obs_flux, dtype=float)
+        error = np.asarray(obs_error, dtype=float)
+
+        chunk_results = []
+        for chunk in chunks:
+            wl_min = float(chunk['min'])
+            wl_max = float(chunk['max'])
+            mask = (wl >= wl_min) & (wl <= wl_max)
+
+            if np.sum(mask) < 5:
+                chunk_results.append({
+                    "success": False,
+                    "error": f"Chunk [{wl_min:.4f}, {wl_max:.4f}] has fewer than 5 data points",
+                    "_wl_min": wl_min,
+                    "_wl_max": wl_max,
+                })
+                continue
+
+            result = fit_spectrum_to_grid(
+                wl[mask], flux[mask], error[mask],
+                grid_wl, grid_spectra, grid_params,
+            )
+            result['_wl_min'] = wl_min
+            result['_wl_max'] = wl_max
+            chunk_results.append(result)
+
+        return {"success": True, "chunk_results": chunk_results}
 
     except Exception as exc:
         return {"success": False, "error": str(exc)}

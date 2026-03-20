@@ -814,7 +814,7 @@ function updateSpectrumPlot() {
 
   // Re-apply fit overlays after Plotly.newPlot completes
   setTimeout(() => {
-    if ((showSineFitOverlay && lastSineFitResult) || (showGridFitOverlay && lastGridFitResult)) {
+    if ((showSineFitOverlay && lastSineFitResult) || (showGridFitOverlay && (lastGridFitResult || lastChunkedFitResult))) {
       if (typeof applyFitOverlays === 'function') {
         applyFitOverlays();
       }

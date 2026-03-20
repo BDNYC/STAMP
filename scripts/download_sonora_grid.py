@@ -18,7 +18,7 @@ Options:
     --teff-step   Teff step size in K       (default: 100)
     --logg        Comma-separated logg vals (default: 3.5,4.0,4.5,5.0,5.5)
     --metals      Comma-separated [M/H]     (default: -0.5,0.0,+0.5)
-    --fsed        Cloud sedimentation param  (default: 1)
+    --fsed        Comma-separated fsed vals  (default: 2,3,4,8)
     --co          C/O ratio                  (default: 1.0 = solar)
     --output-dir  Output grid directory     (default: model_grids/sonora_diamondback)
     --wl-min      Min wavelength in microns  (default: 0.5)
@@ -26,6 +26,7 @@ Options:
     --n-points    Downsampled wavelength pts (default: 2000)
     --keep-zip    Keep the downloaded zip after extraction
     --dry-run     List files without downloading
+    --from-cache  Regenerate .dat files from cached .spec files (no download)
 
 Requires: numpy, requests
 Reference: Morley et al. (2024) https://arxiv.org/abs/2402.00758
@@ -40,6 +41,8 @@ import argparse
 import logging
 import zipfile
 import io
+
+import math
 
 import numpy as np
 
@@ -118,6 +121,13 @@ def _read_sonora_spectrum(filepath):
     data = np.loadtxt(filepath, dtype=float, skiprows=skip)
     wavelengths = data[:, 0]  # microns
     flux = data[:, 1]         # W/m^2/m (Fν = 4π × Hν)
+
+    # Ensure ascending wavelength order (Sonora files are descending)
+    if len(wavelengths) > 1 and wavelengths[0] > wavelengths[-1]:
+        sort_idx = np.argsort(wavelengths)
+        wavelengths = wavelengths[sort_idx]
+        flux = flux[sort_idx]
+
     return wavelengths, flux
 
 
@@ -174,6 +184,104 @@ def _download_with_progress(url, dest, session=None):
     return True
 
 
+_GMKS_TO_LOGG = {31: 3.5, 100: 4.0, 316: 4.5, 1000: 5.0, 3162: 5.5}
+
+
+def _from_cache(output_dir, wl_min, wl_max, n_points):
+    """Regenerate .dat files from cached .spec files without re-downloading."""
+    cache_dir = os.path.join(output_dir, ".cache")
+    spectra_dir = os.path.join(output_dir, "spectra")
+
+    if not os.path.isdir(cache_dir):
+        print(f"ERROR: Cache directory not found: {cache_dir}")
+        sys.exit(1)
+
+    spec_files = [f for f in os.listdir(cache_dir) if f.endswith(".spec")]
+    if not spec_files:
+        print(f"ERROR: No .spec files found in {cache_dir}")
+        sys.exit(1)
+
+    print(f"Found {len(spec_files)} cached .spec files in {cache_dir}")
+
+    # Clean existing spectra
+    if os.path.isdir(spectra_dir):
+        old_dats = [f for f in os.listdir(spectra_dir) if f.endswith(".dat")]
+        if old_dats:
+            print(f"Removing {len(old_dats)} existing .dat files...")
+            for f in old_dats:
+                os.remove(os.path.join(spectra_dir, f))
+    os.makedirs(spectra_dir, exist_ok=True)
+
+    rows = []
+    done = 0
+    skipped = 0
+
+    for spec_file in sorted(spec_files):
+        done += 1
+        parsed = _parse_sonora_name(spec_file)
+        if parsed is None:
+            print(f"[{done}/{len(spec_files)}] SKIP — cannot parse: {spec_file}")
+            skipped += 1
+            continue
+
+        g_mks = parsed["g_mks"]
+        logg = _GMKS_TO_LOGG.get(g_mks)
+        if logg is None:
+            # Fallback: compute from g_mks
+            logg = round(math.log10(g_mks * 100), 1)
+
+        teff = parsed["teff"]
+        met = parsed["metal"]
+        fsed = parsed["fsed"]
+        co = parsed["co"]
+
+        dat_filename = f"sonora_T{teff}_g{logg:.1f}_m{met:+.1f}_f{fsed}.dat"
+        dat_path = os.path.join(spectra_dir, dat_filename)
+        label = f"[{done}/{len(spec_files)}] Teff={teff} logg={logg:.1f} [M/H]={met:+.1f} fsed={fsed}"
+
+        try:
+            spec_path = os.path.join(cache_dir, spec_file)
+            wl, flux = _read_sonora_spectrum(spec_path)
+
+            wl_out, fl_out = _trim_and_downsample(wl, flux, wl_min, wl_max, n_points)
+
+            # Convert wavelength from microns to Angstroms for consistency
+            # with the Phoenix grid (model_grids.py auto-converts A -> um)
+            wl_angstrom = wl_out * 1e4
+
+            data = np.column_stack([wl_angstrom, fl_out])
+            np.savetxt(dat_path, data, fmt="%.6e",
+                       header="wavelength_Angstrom  flux_W_m2_m")
+
+            rows.append({
+                "filename": dat_filename,
+                "Teff": teff,
+                "logg": logg,
+                "metallicity": met,
+                "fsed": fsed,
+            })
+            print(f"{label} — OK ({len(set(fl_out))} unique flux values)")
+
+        except Exception as exc:
+            logger.warning(f"{label} — FAILED: {exc}")
+            skipped += 1
+            continue
+
+    # Write index.csv
+    index_path = os.path.join(output_dir, "index.csv")
+    with open(index_path, "w", newline="") as f:
+        writer = csv.DictWriter(
+            f, fieldnames=["filename", "Teff", "logg", "metallicity", "fsed"]
+        )
+        writer.writeheader()
+        writer.writerows(sorted(rows, key=lambda r: (r["Teff"], r["logg"], r["metallicity"], r["fsed"])))
+
+    print(f"\n{'=' * 60}")
+    print(f"Done! Converted {len(rows)} models, skipped {skipped}")
+    print(f"Spectra: {spectra_dir}")
+    print(f"Index:   {index_path}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Download and convert Sonora Diamondback spectra for SA3D"
@@ -183,7 +291,8 @@ def main():
     parser.add_argument("--teff-step", type=int, default=100)
     parser.add_argument("--logg", type=str, default="3.5,4.0,4.5,5.0,5.5")
     parser.add_argument("--metals", type=str, default="-0.5,0.0,+0.5")
-    parser.add_argument("--fsed", type=int, default=1)
+    parser.add_argument("--fsed", type=str, default="2,3,4,8",
+                        help="Comma-separated fsed values (default: 2,3,4,8)")
     parser.add_argument("--co", type=float, default=1.0)
     parser.add_argument("--output-dir", type=str,
                         default=os.path.join(PROJECT_ROOT, "model_grids", "sonora_diamondback"))
@@ -196,39 +305,48 @@ def main():
                         help="Keep the downloaded zip after extraction")
     parser.add_argument("--dry-run", action="store_true",
                         help="List models without downloading")
+    parser.add_argument("--from-cache", action="store_true",
+                        help="Regenerate .dat files from cached .spec files (no download)")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
+    if args.from_cache:
+        _from_cache(args.output_dir, args.wl_min, args.wl_max, args.n_points)
+        return
+
     teff_values = list(range(args.teff_min, args.teff_max + 1, args.teff_step))
     logg_values = [float(x) for x in args.logg.split(",")]
     metal_values = [float(x) for x in args.metals.split(",")]
+    fsed_values = [int(x) for x in args.fsed.split(",")]
 
-    total = len(teff_values) * len(logg_values) * len(metal_values)
+    total = len(teff_values) * len(logg_values) * len(metal_values) * len(fsed_values)
     print(f"Sonora Diamondback grid: {len(teff_values)} Teff x {len(logg_values)} logg "
-          f"x {len(metal_values)} [M/H] = {total} models")
+          f"x {len(metal_values)} [M/H] x {len(fsed_values)} fsed = {total} models")
     print(f"  Teff: {teff_values[0]}–{teff_values[-1]} K (step {args.teff_step})")
     print(f"  logg: {logg_values}")
     print(f"  [M/H]: {metal_values}")
-    print(f"  fsed: {args.fsed}, C/O: {args.co}")
+    print(f"  fsed: {fsed_values}, C/O: {args.co}")
 
     # Build list of expected filenames
     model_list = []
     for teff in teff_values:
         for logg in logg_values:
             for met in metal_values:
-                fname = _sonora_filename(teff, logg, args.fsed, met, args.co)
-                model_list.append({
-                    "sonora_name": fname,
-                    "teff": teff,
-                    "logg": logg,
-                    "metal": met,
-                })
+                for fsed in fsed_values:
+                    fname = _sonora_filename(teff, logg, fsed, met, args.co)
+                    model_list.append({
+                        "sonora_name": fname,
+                        "teff": teff,
+                        "logg": logg,
+                        "metal": met,
+                        "fsed": fsed,
+                    })
 
     if args.dry_run:
         print(f"\nModels to download:")
         for m in model_list:
-            print(f"  Teff={m['teff']} logg={m['logg']:.1f} [M/H]={m['metal']:+.1f}  ->  {m['sonora_name']}")
+            print(f"  Teff={m['teff']} logg={m['logg']:.1f} [M/H]={m['metal']:+.1f} fsed={m['fsed']}  ->  {m['sonora_name']}")
         print(f"\nTotal: {total} models (dry run, nothing downloaded)")
         print(f"Source: https://zenodo.org/records/{ZENODO_RECORD}")
         return
@@ -280,10 +398,11 @@ def main():
             teff = m["teff"]
             logg = m["logg"]
             met = m["metal"]
+            fsed = m["fsed"]
 
-            label = f"[{done}/{total}] Teff={teff} logg={logg:.1f} [M/H]={met:+.1f}"
+            label = f"[{done}/{total}] Teff={teff} logg={logg:.1f} [M/H]={met:+.1f} fsed={fsed}"
 
-            dat_filename = f"sonora_T{teff}_g{logg:.1f}_m{met:+.1f}.dat"
+            dat_filename = f"sonora_T{teff}_g{logg:.1f}_m{met:+.1f}_f{fsed}.dat"
             dat_path = os.path.join(spectra_dir, dat_filename)
 
             # Skip if already converted
@@ -294,19 +413,20 @@ def main():
                     "Teff": teff,
                     "logg": logg,
                     "metallicity": met,
+                    "fsed": fsed,
                 })
                 continue
 
             # Match by parsed parameter values (robust to path/extension variations)
             g_mks = int(10**logg / 100)
-            lookup_key = (teff, g_mks, args.fsed, met)
+            lookup_key = (teff, g_mks, fsed, met)
             found_path = zip_lookup.get(lookup_key)
 
             # Handle minor rounding differences (e.g., g3162 vs g3160 for logg=5.5)
             if found_path is None:
                 best_delta = None
                 for key, path in zip_lookup.items():
-                    if key[0] == teff and key[2] == args.fsed and key[3] == met:
+                    if key[0] == teff and key[2] == fsed and key[3] == met:
                         delta = abs(key[1] - g_mks)
                         if delta <= 5 and (best_delta is None or delta < best_delta):
                             best_delta = delta
@@ -347,6 +467,7 @@ def main():
                     "Teff": teff,
                     "logg": logg,
                     "metallicity": met,
+                    "fsed": fsed,
                 })
 
                 # Clean up temp file
@@ -364,10 +485,10 @@ def main():
     index_path = os.path.join(args.output_dir, "index.csv")
     with open(index_path, "w", newline="") as f:
         writer = csv.DictWriter(
-            f, fieldnames=["filename", "Teff", "logg", "metallicity"]
+            f, fieldnames=["filename", "Teff", "logg", "metallicity", "fsed"]
         )
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(sorted(rows, key=lambda r: (r["Teff"], r["logg"], r["metallicity"], r["fsed"])))
 
     # --- Clean up zip (only after successful extraction) ---
     if not args.keep_zip and os.path.exists(zip_path) and len(rows) > 0:

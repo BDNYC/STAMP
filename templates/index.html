@@ -358,10 +358,16 @@
                                         <option value="">-- No grids available --</option>
                                     </select>
                                 </label>
+                                <label class="text-sm" style="color: var(--text-secondary);">
+                                    Chunks:
+                                    <input type="number" id="chunkCountInput" min="1" max="10" step="1"
+                                           placeholder="1" class="stamp-input ml-1" style="padding: 2px 6px; width: 4rem;">
+                                </label>
                                 <button id="fitGridBtn" class="stamp-btn stamp-btn-primary text-sm" style="background: #EF4444; border-color: #EF4444;">Fit Spectrum</button>
                                 <button id="clearGridFitBtn" class="stamp-btn stamp-btn-secondary text-sm">Clear Fit</button>
                                 <button id="gridSweepBtn" class="stamp-btn stamp-btn-secondary text-sm">Parameter Time Series</button>
                             </div>
+                            <div id="chunkRangesContainer" class="mt-2 space-y-2" style="display: none;"></div>
                         </details>
 
                         <!-- Parameter Readout -->
