@@ -18,7 +18,7 @@ import h5py
 
 import state
 from state import _progress_set, PROGRESS, RESULTS, PROG_LOCK, cache
-from config import BASE_DIR
+from config import BASE_DIR, DEMO_DATA_DIR
 from data_io import apply_data_ranges, _first_key
 from processing import process_mast_files_with_gaps
 from plotting import create_surface_plot_with_visits, create_heatmap_plot
@@ -312,7 +312,7 @@ def start_mast():
         use_demo = request.form.get('use_demo', 'false').lower() == 'true'
 
         if use_demo:
-            demo_zip = os.path.join(BASE_DIR, 'static', 'demo_data', 'demo_jwst_timeseries.zip')
+            demo_zip = os.path.join(DEMO_DATA_DIR, 'demo_jwst_timeseries.zip')
             if not os.path.exists(demo_zip):
                 return jsonify({'error': 'Demo dataset not found. Please upload your own data.'}), 404
             tmp_zip = demo_zip

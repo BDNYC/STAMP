@@ -38,3 +38,4 @@ def load_config(config_file='config.yaml'):
 CONFIG = load_config()
 DATA_DIR = CONFIG.get('data_dir', 'Data')
 GRIDS_DIR = os.environ.get('GRIDS_DIR', os.path.join(BASE_DIR, 'model_grids'))
+DEMO_DATA_DIR = os.environ.get('DEMO_DATA_DIR', os.path.join(BASE_DIR, 'static', 'demo_data'))
