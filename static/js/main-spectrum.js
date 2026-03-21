@@ -72,7 +72,6 @@ function showSpectrumAtTime(clickData, plotDiv) {
   const live = (plotDiv && (plotDiv._fullData || plotDiv.data)) ? (plotDiv._fullData || plotDiv.data) : [];
   let plotData = cached || live;
 
-  // 1. Locate relevant traces
   let mainTrace = null;
   let allVisitTraces = [];
 
@@ -91,7 +90,6 @@ function showSpectrumAtTime(clickData, plotDiv) {
     }
   }
 
-  // 2. Accumulate multi-visit surface data
   if (plotDiv.id === 'surfacePlot' && allVisitTraces.length > 0) {
     const firstTrace = allVisitTraces[0].trace;
     let wavelengthData = firstTrace.y;
@@ -175,7 +173,6 @@ function showSpectrumAtTime(clickData, plotDiv) {
     if (Array.isArray(timeData[0])) timeData = timeData[0];
   }
 
-  // 3. Apply user-specified range filters
   let wlIndicesUsed = null;
   const ranges = window.__userRanges || {};
 
@@ -217,7 +214,6 @@ function showSpectrumAtTime(clickData, plotDiv) {
     }
   }
 
-  // 4. Find the clicked time/wavelength index
   let timeIndex = 0;
   let minDiff = Infinity;
   for (let i = 0; i < timeData.length; i++) {
@@ -243,7 +239,6 @@ function showSpectrumAtTime(clickData, plotDiv) {
   const eligible = getEligibleWavelengthIndices(wavelengthData);
   if (eligible.length && !eligible.includes(currentWavelengthIndex)) currentWavelengthIndex = eligible[0];
 
-  // 5. Compute global min/max for Y-axis scaling
   let globalMin = Infinity;
   let globalMax = -Infinity;
   for (let i = 0; i < fluxData.length; i++) {
@@ -295,7 +290,6 @@ function showSpectrumAtTime(clickData, plotDiv) {
     }
   }
 
-  // 6. Assemble spectrum data object
   currentSpectrumData = {
     wavelengthData,
     timeData,
@@ -317,7 +311,6 @@ function showSpectrumAtTime(clickData, plotDiv) {
 
   currentSpectrumData.lockedRibbonRange = computeLockedRibbonRange(currentSpectrumData, null);
 
-  // 7. Open viewer and render
   document.getElementById('spectrumContainer').classList.remove('hidden');
   updateSpectrumPlot();
   if (!window.tourActive || !window.tourActive()) {
@@ -433,13 +426,11 @@ function updateSpectrumPlot() {
     return errsArr;
   }
 
-  // Branch 1: vs_wavelength + bands active
   if (spectrumMode === 'vs_wavelength') {
     if (activeBands && activeBands.length > 0) {
       const inMask = xValues.map((w) => activeBands.some(b => w >= b.start && w <= b.end));
       const inY = values.map((v, i) => inMask[i] ? v :  NaN);
 
-      // Gray base trace (full spectrum, dimmed)
       const baseTrace = {
         x: xValues,
         y: values,
@@ -451,7 +442,6 @@ function updateSpectrumPlot() {
         hoverinfo: 'skip'
       };
 
-      // Colored in-band trace
       const spectrumIn = {
         x: xValues,
         y: inY,
@@ -492,7 +482,6 @@ function updateSpectrumPlot() {
 
       Plotly.newPlot('spectrumPlot', traces, layout, { responsive: true });
 
-    // Branch 2: vs_wavelength + no bands
     } else {
       const spectrumTrace = {
         x: xValues,
@@ -506,7 +495,6 @@ function updateSpectrumPlot() {
 
       const traces = [spectrumTrace];
 
-      // Full error ribbon
       if (showErrors) {
         const sigma = sigmaFor(values, errors);
         traces.push(
@@ -518,7 +506,6 @@ function updateSpectrumPlot() {
       Plotly.newPlot('spectrumPlot', traces, layout, { responsive: true });
     }
 
-  // Branch 3: vs_time + bands active (band-averaged time series)
   } else {
     if (activeBands && activeBands.length >= 1) {
       const timeArray = xValues;
@@ -714,7 +701,6 @@ function updateSpectrumPlot() {
       layout.showlegend = activeBands.length > 1;
       Plotly.newPlot('spectrumPlot', traces, layout, { responsive: true });
 
-    // Branch 4: vs_time + no bands (single wavelength time series)
     } else {
       const traces = [];
       const gapThresholdHours = 0.5;

@@ -34,9 +34,7 @@ import logging
 
 import numpy as np
 
-# ---------------------------------------------------------------------------
 # Import shared utilities from grid_utils (same directory)
-# ---------------------------------------------------------------------------
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from grid_utils import (parse_svo_votable, download_svo_spectrum,
                         trim_and_downsample_angstrom, write_dat_file,

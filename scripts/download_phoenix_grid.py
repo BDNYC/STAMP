@@ -33,9 +33,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
 # Phoenix server layout
-# ---------------------------------------------------------------------------
 PHOENIX_BASE = "https://phoenix.astro.physik.uni-goettingen.de/data/HiResFITS"
 WAVE_FILE_URL = f"{PHOENIX_BASE}/WAVE_PHOENIX-ACES-AGSS-COND-2011.fits"
 

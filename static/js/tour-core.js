@@ -1,6 +1,6 @@
 /* tour-core.js -- Tour Lifecycle, Navigation & Step Display */
 
-/* ── Timer & state tracking ──────────────────────────────────────── */
+/* Timer & state tracking */
 
 /** Cleanup function for the active waitForCondition (observer / listener). */
 let activeWaitCleanup = null;
@@ -47,7 +47,7 @@ function isConditionCurrentlyMet(condition) {
     return false;
 }
 
-/* ── Initialization ──────────────────────────────────────────────── */
+/* Initialization */
 
 document.addEventListener('DOMContentLoaded', function () {
     setTimeout(function () {
@@ -56,7 +56,7 @@ document.addEventListener('DOMContentLoaded', function () {
     setupEventListeners();
 });
 
-/* ── Event Binding ───────────────────────────────────────────────── */
+/* Event Binding */
 
 function setupEventListeners() {
     const acceptBtn  = document.getElementById('tourAcceptBtn');
@@ -72,7 +72,7 @@ function setupEventListeners() {
     if (closeBtn)   closeBtn.addEventListener('click', endTour);
 }
 
-/* ── Tour Prompt ─────────────────────────────────────────────────── */
+/* Tour Prompt */
 
 function showTourPrompt() {
     const prompt = document.getElementById('tourPrompt');
@@ -97,7 +97,7 @@ function hideTourPrompt() {
     if (prompt) prompt.classList.add('hidden');
 }
 
-/* ── Tour Start / Decline ────────────────────────────────────────── */
+/* Tour Start / Decline */
 
 function startTour() {
     hideTourPrompt();
@@ -132,7 +132,7 @@ function declineTour() {
     hideTourPrompt();
 }
 
-/* ── Step Display ────────────────────────────────────────────────── */
+/* Step Display */
 
 function showStep(stepIndex) {
     clearActiveTimers();
@@ -284,7 +284,7 @@ function setupWaitCondition(step, stepIndex, isBackNavigation, nextBtn) {
     }
 }
 
-/* ── Step Counter ────────────────────────────────────────────────── */
+/* Step Counter */
 
 function updateStepCounter(stepIndex) {
     const counter = document.getElementById('tourStepCounter');
@@ -293,7 +293,7 @@ function updateStepCounter(stepIndex) {
     }
 }
 
-/* ── Navigation ──────────────────────────────────────────────────── */
+/* Navigation */
 
 function nextStep() {
     if (isOnEndStep) {
@@ -316,7 +316,7 @@ function prevStep() {
     }
 }
 
-/* ── End Step & Tour Cleanup ─────────────────────────────────────── */
+/* End Step & Tour Cleanup */
 
 function showEndStep() {
     const messageBox = document.getElementById('tourMessageBox');
@@ -368,7 +368,7 @@ function endTour() {
     }, 300);
 }
 
-/* ── Condition Waiting (event-driven) ────────────────────────────── */
+/* Condition Waiting (event-driven) */
 
 function waitForCondition(condition, callback) {
     // Clear any previous wait
@@ -423,6 +423,6 @@ function waitForCondition(condition, callback) {
     }
 }
 
-/* ── Global Export ────────────────────────────────────────────────── */
+/* Global Export */
 
 window.tourActive = function () { return tourActive; };

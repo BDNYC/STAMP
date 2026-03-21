@@ -83,9 +83,7 @@ def _read_bobcat_spectrum(filepath):
     return data[:, 0], data[:, 1]
 
 
-# ---------------------------------------------------------------------------
 # Zenodo archive URLs — one tar.gz per metallicity
-# ---------------------------------------------------------------------------
 ZENODO_RECORD = "5063476"
 METAL_ARCHIVES = {
     0.0:  {
@@ -105,9 +103,7 @@ METAL_ARCHIVES = {
     },
 }
 
-# ---------------------------------------------------------------------------
 # Filename parsing
-# ---------------------------------------------------------------------------
 # Bobcat .spec filenames follow the pattern:
 #   sp_t{teff}g{g_cgs}nc_m{metal}.spec
 # where g_cgs is the surface gravity in cm/s^2 (e.g., 10000 for logg=4.0).
@@ -146,9 +142,7 @@ def _dat_filename(teff, logg, metal):
     return f"bobcat_T{int(teff)}_g{logg:.2f}_m{metal:+.1f}.dat"
 
 
-# ---------------------------------------------------------------------------
 # Main processing
-# ---------------------------------------------------------------------------
 
 def _process_tar(archive_path, metal, output_dir, args):
     """Process all .spec files inside a single metallicity tar.gz.

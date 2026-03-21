@@ -20,10 +20,8 @@ import sys
 
 import numpy as np
 
-# ---------------------------------------------------------------------------
 # Resolve imports: add project root to sys.path so we can import fitting /
 # model_grids regardless of where the script is invoked from.
-# ---------------------------------------------------------------------------
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PROJECT_ROOT)
@@ -31,9 +29,7 @@ sys.path.insert(0, PROJECT_ROOT)
 from fitting import fit_spectrum_to_grid
 from model_grids import load_grid_from_directory
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 def _grid_has_varying_metallicity(params):
     """Return True if the grid has more than one unique metallicity value."""
@@ -97,9 +93,7 @@ def run_one_test(label, grid_wl, grid_spectra, grid_params, model_idx, snr, rng)
     return result
 
 
-# ---------------------------------------------------------------------------
 # Terminal report
-# ---------------------------------------------------------------------------
 
 def print_report(result, grid_params, grid_spectra, grid_wl, full_ranking=False):
     """Print a detailed terminal diagnostic for one test."""
@@ -262,9 +256,7 @@ def print_report(result, grid_params, grid_spectra, grid_wl, full_ranking=False)
     return all_pass, tests
 
 
-# ---------------------------------------------------------------------------
 # Diagnostic plot
-# ---------------------------------------------------------------------------
 
 def make_diagnostic_plot(results, grid_params, grid_spectra, grid_wl, output_path):
     """Generate a multi-panel diagnostic figure."""
@@ -391,9 +383,7 @@ def make_diagnostic_plot(results, grid_params, grid_spectra, grid_wl, output_pat
     return True
 
 
-# ---------------------------------------------------------------------------
 # Main
-# ---------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(

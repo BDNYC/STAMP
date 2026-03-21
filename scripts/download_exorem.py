@@ -50,9 +50,7 @@ from grid_utils import (download_with_progress, trim_and_downsample,
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
 # Source URLs
-# ---------------------------------------------------------------------------
 BASE_URL = "https://lesia.obspm.fr/exorem/YGP_grids/Exo-REMk26/Low_Res_grid_2026"
 TARBALL_URL = f"{BASE_URL}/R500_cloudless_2026.tar.gz"
 

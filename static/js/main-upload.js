@@ -190,9 +190,6 @@ function hideProgress() {
 async function uploadMastDirectory() {
   const formData = new FormData();
 
-  // 1. Collect form data
-
-  // File selection
   if (window.isDemoDataSelected) {
     formData.append('use_demo', 'true');
   } else {
@@ -203,18 +200,15 @@ async function uploadMastDirectory() {
     formData.append('mast_zip', window.selectedFile);
   }
 
-  // Color scale
   const selectedColorscale = document.querySelector('.colorscale-option.selected');
   if (!selectedColorscale) { alert('Please select a color scale.'); return; }
   formData.append('colorscale', selectedColorscale.getAttribute('data-colorscale'));
 
-  // Options
   const useInterpolation = document.getElementById('linearInterpolation').checked;
   formData.append('use_interpolation', useInterpolation);
   const numIntegrations = document.getElementById('numIntegrations').value;
   formData.append('num_integrations', numIntegrations || '0');
 
-  // Range filters
   const timeRangeMin = document.getElementById('timeRangeMin').value;
   const timeRangeMax = document.getElementById('timeRangeMax').value;
   const wavelengthRangeMin = document.getElementById('wavelengthRangeMin').value;
@@ -230,7 +224,6 @@ async function uploadMastDirectory() {
   formData.append('variability_range_max', variabilityRangeMax || '');
   formData.append('z_axis_display', zAxisDisplay);
 
-  // Custom bands
   const customBands = Array.from(document.getElementById('customBands').children).map(band => {
     const inputs = band.querySelectorAll('input');
     return { name: inputs[0].value.trim(), start: parseFloat(inputs[1].value), end: parseFloat(inputs[2].value) };
@@ -264,14 +257,12 @@ async function uploadMastDirectory() {
   }
 
   try {
-    // 2. Start the async backend job
     const startRes = await fetch('/start_mast', { method: 'POST', body:  formData });
     if (!startRes.ok) { const t = await startRes.text(); throw new Error(`HTTP ${startRes.status}: ${t}`); }
     const startData = await startRes.json();
     if (!startData.job_id) throw new Error('No job id returned');
     __currentJobId = startData.job_id;
 
-    // 3. Poll progress
     await new Promise((resolve, reject) => {
       const poll = async () => {
         try {
@@ -308,7 +299,6 @@ async function uploadMastDirectory() {
       poll();
     });
 
-    // 4. Fetch results
     const res = await fetch(`/results/${__currentJobId}`);
     if (!res.ok) { const t = await res.text(); throw new Error(`HTTP ${res.status}: ${t}`); }
     const data = await res.json();
@@ -321,7 +311,6 @@ async function uploadMastDirectory() {
     if (data.raw_wavelengths) { try { window.__rawWavelengths = JSON.parse(data.raw_wavelengths); } catch(_) { window.__rawWavelengths = null; } }
     if (data.raw_time) { try { window.__rawTime = JSON.parse(data.raw_time); } catch(_) { window.__rawTime = null; } }
 
-    // 5. Render plots
     const surfaceData = JSON.parse(data.surface_plot);
     const heatmapData = JSON.parse(data.heatmap_plot);
 
@@ -359,7 +348,6 @@ async function uploadMastDirectory() {
       createPlot('heatmapPlot', heatmapData.data, heatmapData.layout, { responsive: true })
     ]);
 
-    // 6. Signal tour that plots are loaded
     window.stampsDataLoaded = true;
     window.dispatchEvent(new CustomEvent('stampsDataLoaded'));
 
@@ -371,7 +359,6 @@ async function uploadMastDirectory() {
         document.getElementById('plotsContainer').scrollIntoView({ behavior: 'smooth' });
     }
 
-    // 7. Render band buttons
     renderBandButtons();
     setActiveBand(null);
   } catch (error) {

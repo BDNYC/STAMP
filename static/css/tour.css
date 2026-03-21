@@ -96,7 +96,6 @@
     transition: none !important;
 }
 
-/* Close X button */
 .tour-close-x {
     position: absolute;
     top: 8px;
@@ -188,7 +187,6 @@
     background: #4b5563;
 }
 
-/* Step Counter */
 .tour-step-counter {
     color: #9ca3af;
     font-size: 12px;
@@ -273,7 +271,6 @@
     z-index: 9999 !important;
 }
 
-/* Animations */
 @keyframes slideInRight {
     from {
         opacity: 0;
@@ -303,7 +300,6 @@
     }
 }
 
-/* Hidden state */
 .hidden {
     display: none !important;
 }

@@ -1,6 +1,6 @@
 /* tour-overlay.js -- Visual Layer (overlay, highlight pool, scroll, positioning) */
 
-/* ── Scroll lock (block user scrolling, allow programmatic) ─────── */
+/* Scroll lock (block user scrolling, allow programmatic) */
 
 /** Block user-initiated scrolling (wheel, touch, keyboard). */
 var _scrollHandler = function (e) { e.preventDefault(); };
@@ -22,7 +22,7 @@ function unlockScroll() {
     window.removeEventListener('keydown', _keyScrollHandler);
 }
 
-/* ── Overlay control ─────────────────────────────────────────────── */
+/* Overlay control */
 
 /** Show the persistent dimming overlay (called once at tour start). */
 function showOverlay() {
@@ -46,7 +46,7 @@ function hideOverlay() {
     overlay.addEventListener('transitionend', onDone);
 }
 
-/* ── Highlight pool ──────────────────────────────────────────────── */
+/* Highlight pool */
 
 /**
  * Position highlight boxes from the pre-created pool around target elements.
@@ -183,7 +183,7 @@ function clearHighlights() {
     if (overlay) overlay.style.clipPath = '';
 }
 
-/* ── Scrolling ───────────────────────────────────────────────────── */
+/* Scrolling */
 
 /**
  * Scroll the page so that the target region is comfortably visible.
@@ -239,7 +239,7 @@ function scrollToElement(element, highlightSelectors) {
     return true;
 }
 
-/* ── Message box positioning ─────────────────────────────────────── */
+/* Message box positioning */
 
 /** Position the tour message box relative to the highlighted element. */
 function positionMessageBox(element, position) {

@@ -50,9 +50,7 @@ import tempfile
 
 import numpy as np
 
-# ---------------------------------------------------------------------------
 # Import shared utilities from grid_utils (same directory)
-# ---------------------------------------------------------------------------
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from grid_utils import (download_with_progress, trim_and_downsample,
                         write_dat_file, write_index_csv, add_common_args,
@@ -60,9 +58,7 @@ from grid_utils import (download_with_progress, trim_and_downsample,
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
 # Constants
-# ---------------------------------------------------------------------------
 
 DROPBOX_URL = "https://www.dropbox.com/s/3lnt7pyitueor2r/sulfideclouds.tar.gz?dl=1"
 ARCHIVE_FILENAME = "sulfideclouds.tar.gz"
@@ -106,9 +102,7 @@ _GMKS_TO_LOGG = {
 }
 
 
-# ---------------------------------------------------------------------------
 # Filename parsing
-# ---------------------------------------------------------------------------
 
 def _parse_morley_filename(name):
     """Parse Teff, g_mks, and fsed from a Morley 2012 filename.
@@ -143,9 +137,7 @@ def _parse_morley_filename(name):
     return None
 
 
-# ---------------------------------------------------------------------------
 # Unit auto-detection
-# ---------------------------------------------------------------------------
 
 def _read_morley_spectrum(filepath):
     """Read a Morley 2012 spectrum file.
@@ -184,9 +176,7 @@ def _read_morley_spectrum(filepath):
 _C_ANG_S = 2.99792458e18
 
 
-# ---------------------------------------------------------------------------
 # Inspect mode
-# ---------------------------------------------------------------------------
 
 def _inspect_archive(tar_path):
     """Open the tar.gz, list contents, and show sample file data."""
@@ -288,18 +278,14 @@ def _inspect_archive(tar_path):
     print(f"Re-run without --inspect to process all files.")
 
 
-# ---------------------------------------------------------------------------
 # Output filename builder
-# ---------------------------------------------------------------------------
 
 def _dat_filename(teff, logg, fsed):
     """Build the standardised .dat filename for a Morley 2012 model."""
     return f"morley12_T{int(teff)}_g{logg:.1f}_f{int(fsed)}.dat"
 
 
-# ---------------------------------------------------------------------------
 # Main processing
-# ---------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(

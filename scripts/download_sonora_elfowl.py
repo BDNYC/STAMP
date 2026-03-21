@@ -22,7 +22,7 @@ Parameters per sub-grid:
     log(Kzz):   5 values (e.g., 2, 4, 6, 7, 8)
     Models:     ~14,400 per sub-grid, ~43,200 total
 
-CRITICAL: Piecewise processing to fit in limited disk space (~27 GB free).
+Uses piecewise processing to fit in limited disk space (~27 GB free).
 Each chunk is downloaded, extracted, processed, then deleted before the next.
 Peak disk usage: ~20 GB (one ~9.5 GB tar.gz + extracted .nc files).
 
@@ -60,9 +60,7 @@ import glob as globmod
 
 import numpy as np
 
-# ---------------------------------------------------------------------------
 # Dependency check: xarray + netcdf4 required for .nc files
-# ---------------------------------------------------------------------------
 try:
     import xarray as xr
 except ImportError:
@@ -70,9 +68,7 @@ except ImportError:
         "ERROR: xarray and netcdf4 required. Install: pip install xarray netcdf4"
     )
 
-# ---------------------------------------------------------------------------
 # Import shared grid utilities from the same scripts/ directory
-# ---------------------------------------------------------------------------
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from grid_utils import (download_with_progress, trim_and_downsample,
                         write_dat_file, write_index_csv, add_common_args,
@@ -80,9 +76,7 @@ from grid_utils import (download_with_progress, trim_and_downsample,
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
 # Zenodo record IDs — one per sub-grid (spectral type)
-# ---------------------------------------------------------------------------
 ZENODO_RECORDS = {
     "Y": "15150865",
     "T": "15150874",
@@ -92,9 +86,7 @@ ZENODO_RECORDS = {
 ZENODO_API_BASE = "https://zenodo.org/api/records"
 
 
-# ---------------------------------------------------------------------------
 # Zenodo API helpers
-# ---------------------------------------------------------------------------
 
 def fetch_chunk_info(record_id, session=None):
     """Query Zenodo API for chunk filenames and download URLs.
@@ -132,9 +124,7 @@ def fetch_chunk_info(record_id, session=None):
     return chunks
 
 
-# ---------------------------------------------------------------------------
 # NetCDF parsing helpers
-# ---------------------------------------------------------------------------
 
 # Regex to extract parameters from .nc filenames.
 # Expected patterns like:
@@ -321,9 +311,7 @@ def _inspect_nc(nc_path):
     ds.close()
 
 
-# ---------------------------------------------------------------------------
 # .dat filename builder
-# ---------------------------------------------------------------------------
 
 def _dat_filename(subgrid, teff, logg, metal, co, kzz):
     """Build the standardised .dat filename for an Elf Owl model."""
@@ -331,9 +319,7 @@ def _dat_filename(subgrid, teff, logg, metal, co, kzz):
             f"_m{metal:+.1f}_co{co}_kzz{kzz}.dat")
 
 
-# ---------------------------------------------------------------------------
 # Chunk processing (piecewise for disk safety)
-# ---------------------------------------------------------------------------
 
 def _process_chunk(chunk_info, subgrid, output_dir, args, session,
                    chunk_idx, total_chunks):
@@ -558,9 +544,7 @@ def _cleanup_directory(dir_path):
         logger.warning(f"  Could not clean up {dir_path}: {exc}")
 
 
-# ---------------------------------------------------------------------------
 # Inspect mode
-# ---------------------------------------------------------------------------
 
 def _run_inspect(subgrid, session):
     """Download first chunk, extract one .nc, print structure, exit."""
@@ -654,9 +638,7 @@ def _run_inspect(subgrid, session):
           f"script's parsing logic before full download.")
 
 
-# ---------------------------------------------------------------------------
 # Main
-# ---------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(

@@ -45,9 +45,7 @@ from grid_utils import (parse_svo_votable, download_svo_spectrum,
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
 # SVO listing URLs for ATMO 2020 sub-grids
-# ---------------------------------------------------------------------------
 SVO_SSAP_BASE = "http://svo2.cab.inta-csic.es/theory/newov2/ssap.php"
 
 SUBGRIDS = {

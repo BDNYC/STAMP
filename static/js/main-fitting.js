@@ -79,7 +79,7 @@ function _extractCurrentSpectrum() {
   return { wavelengths: Array.from(wavelengths), flux, error };
 }
 
-// ── Chunk Range UI ──
+// Chunk Range UI
 
 /**
  * Build chunk wavelength range input rows for N chunks.
@@ -146,7 +146,7 @@ function getChunkDefinitions() {
   return chunks;
 }
 
-// ── Sinusoidal Fitting ──
+// Sinusoidal Fitting
 
 /**
  * Request a sinusoidal fit for the current light curve and overlay the result.
@@ -212,7 +212,7 @@ function clearSineFit() {
   if (readout) readout.innerHTML = '';
 }
 
-// ── Grid Fitting ──
+// Grid Fitting
 
 /**
  * Request a spectral grid fit for the current spectrum and overlay the result.
@@ -330,7 +330,7 @@ function clearGridFit() {
   if (readout) readout.innerHTML = '';
 }
 
-// ── Async Sweep Jobs ──
+// Async Sweep Jobs
 
 /**
  * Poll a fitting job until complete, then invoke callback with results.
@@ -470,7 +470,7 @@ async function requestGridSweep() {
   }
 }
 
-// ── Overlay Rendering ──
+// Overlay Rendering
 
 /**
  * Re-apply fit overlay traces after Plotly.newPlot completes.
@@ -568,7 +568,7 @@ function applyFitOverlays() {
   }
 }
 
-// ── Derived Plots ──
+// Derived Plots
 
 /**
  * Render residual plot below the main spectrum plot.
@@ -788,7 +788,7 @@ function renderParameterTimeSeriesPlot(result) {
   Plotly.newPlot('derivedPlot', traces, layout, { responsive: true });
 }
 
-// ── Parameter Readout ──
+// Parameter Readout
 
 /**
  * Display fit parameters as styled text.
@@ -837,7 +837,7 @@ function updateFitParameterReadout(type, result) {
   }
 }
 
-// ── Grid List Loading ──
+// Grid List Loading
 
 /**
  * Fetch available model grids and populate the dropdown.
@@ -866,7 +866,7 @@ async function loadGridList() {
   }
 }
 
-// ── Event Binding ──
+// Event Binding
 
 document.addEventListener('DOMContentLoaded', function() {
   // Load grid list

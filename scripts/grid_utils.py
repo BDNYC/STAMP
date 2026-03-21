@@ -33,9 +33,7 @@ DEFAULT_N_POINTS = 2000
 SVO_BASE = "http://svo2.cab.inta-csic.es/theory/newov2"
 
 
-# ---------------------------------------------------------------------------
 # Download helpers
-# ---------------------------------------------------------------------------
 
 def download_with_progress(url, dest, session=None, label=None, timeout=600):
     """Stream-download *url* to *dest* with a progress bar.
@@ -88,9 +86,7 @@ def download_with_progress(url, dest, session=None, label=None, timeout=600):
     return True
 
 
-# ---------------------------------------------------------------------------
 # Spectral processing
-# ---------------------------------------------------------------------------
 
 def trim_and_downsample(wl_um, flux, wl_min=None, wl_max=None, n_pts=None):
     """Trim wavelength range (microns) and downsample.
@@ -139,9 +135,7 @@ def trim_and_downsample_angstrom(wl_a, flux, wl_min_a=None, wl_max_a=None,
     return wl_trim, fl_trim
 
 
-# ---------------------------------------------------------------------------
 # .dat and index.csv writers
-# ---------------------------------------------------------------------------
 
 def write_dat_file(path, wl_angstrom, flux, unit_tag="flux_erg_s_cm2_A"):
     """Write a standardised two-column .dat file.
@@ -173,9 +167,7 @@ def write_index_csv(path, rows, fieldnames):
         writer.writerows(rows_sorted)
 
 
-# ---------------------------------------------------------------------------
 # Text spectrum reader
-# ---------------------------------------------------------------------------
 
 def read_text_spectrum(filepath):
     """Generic reader for 2-column text spectra with header auto-detection.
@@ -199,9 +191,7 @@ def read_text_spectrum(filepath):
     return data[:, 0], data[:, 1]
 
 
-# ---------------------------------------------------------------------------
 # SVO VOTable helpers
-# ---------------------------------------------------------------------------
 
 def parse_svo_votable(xml_bytes):
     """Parse an SVO SSAP VOTable listing into model metadata.
@@ -314,9 +304,7 @@ def download_svo_spectrum(base_url, fid, session=None, max_retries=3,
     return np.array(wavelengths), np.array(fluxes)
 
 
-# ---------------------------------------------------------------------------
 # Argparse helpers
-# ---------------------------------------------------------------------------
 
 def add_common_args(parser):
     """Add standard flags shared by all grid download scripts."""
@@ -335,9 +323,7 @@ def add_common_args(parser):
     return parser
 
 
-# ---------------------------------------------------------------------------
 # Summary
-# ---------------------------------------------------------------------------
 
 def print_summary(output_dir, n_ok, n_skip):
     """Print completion stats and disk usage."""

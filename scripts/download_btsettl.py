@@ -48,9 +48,7 @@ import logging
 
 import numpy as np
 
-# --------------------------------------------------------------------------
 # Check for xarray/netcdf4 early so users get a clear error message
-# --------------------------------------------------------------------------
 try:
     import xarray as xr
 except ImportError:
@@ -59,9 +57,7 @@ except ImportError:
         "Install with: pip install xarray netcdf4"
     )
 
-# --------------------------------------------------------------------------
 # Import shared grid utilities from the same directory
-# --------------------------------------------------------------------------
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from grid_utils import (
     download_with_progress,
@@ -76,9 +72,7 @@ from grid_utils import (
 
 logger = logging.getLogger(__name__)
 
-# --------------------------------------------------------------------------
 # Constants
-# --------------------------------------------------------------------------
 
 ZENODO_RECORD = "8015969"
 NC_FILENAME = "BT_SETTL_full.nc"
@@ -98,9 +92,7 @@ WL_MAX_A = 55000.0
 METALLICITY = 0.0
 
 
-# --------------------------------------------------------------------------
 # Wavelength unit detection
-# --------------------------------------------------------------------------
 
 def _detect_wavelength_unit(wl_array, attrs=None):
     """Auto-detect wavelength unit from range and/or attributes.
@@ -168,9 +160,7 @@ def _convert_to_angstrom(wl_array, unit):
     return wl_array * factor
 
 
-# --------------------------------------------------------------------------
 # Dataset inspection
-# --------------------------------------------------------------------------
 
 def _inspect_dataset(nc_path):
     """Open the NetCDF and print its full structure, then exit."""
@@ -231,9 +221,7 @@ def _inspect_dataset(nc_path):
     print("Inspection complete. Use this info to verify coordinate/variable names.")
 
 
-# --------------------------------------------------------------------------
 # Conversion
-# --------------------------------------------------------------------------
 
 def _find_dimensions(ds):
     """Identify wavelength, Teff, and logg dimensions/variables in the dataset.
