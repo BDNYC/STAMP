@@ -7,7 +7,7 @@ the correct stellar parameters.
 
 Usage:
     python scripts/validate_fitting.py                        # full test suite
-    python scripts/validate_fitting.py --grid blackbody_demo  # specify grid
+    python scripts/validate_fitting.py --grid phoenix_cool    # specify grid
     python scripts/validate_fitting.py --grid phoenix_cool --feh -0.5  # PHOENIX grid
     python scripts/validate_fitting.py --teff 4000 --logg 5.0 # pick injection model
     python scripts/validate_fitting.py --no-plot              # terminal only
@@ -400,8 +400,8 @@ def main():
         description="Inject-and-recover validation for SA3D grid fitter"
     )
     parser.add_argument(
-        "--grid", default="blackbody_demo",
-        help="Grid directory name under model_grids/ (default: blackbody_demo)"
+        "--grid", default="phoenix_cool",
+        help="Grid directory name under model_grids/ (default: phoenix_cool)"
     )
     parser.add_argument("--teff", type=float, default=3500.0, help="Injection Teff (default: 3500)")
     parser.add_argument("--logg", type=float, default=4.5, help="Injection logg (default: 4.5)")

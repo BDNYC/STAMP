@@ -4,3 +4,11 @@ __pycache__/
 *.pyc
 .DS_Store
 .idea/
+
+.venv/
+.env
+*.mp4
+plots/
+node_modules/
+.claude/
+model_grids/validation_report.png
