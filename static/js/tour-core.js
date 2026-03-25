@@ -44,6 +44,19 @@ function isConditionCurrentlyMet(condition) {
         return !!(checkbox && checkbox.checked &&
             spectrumContainer && !spectrumContainer.classList.contains('hidden'));
     }
+    if (condition === 'gridFitComplete') {
+        return typeof showGridFitOverlay !== 'undefined' && showGridFitOverlay === true;
+    }
+    if (condition === 'gridSweepComplete') {
+        var container = document.getElementById('derivedPlotContainer');
+        return !!(container && !container.classList.contains('hidden'));
+    }
+    if (condition === 'sineFitComplete') {
+        return typeof showSineFitOverlay !== 'undefined' && showSineFitOverlay === true;
+    }
+    if (condition === 'sineSweepComplete') {
+        return window._sineSweepDone === true;
+    }
     return false;
 }
 
@@ -147,8 +160,13 @@ function showStep(stepIndex) {
         return;
     }
 
-    // Update UI content
-    updateStepCounter(stepIndex);
+    // Programmatically open any <details> elements this step requires
+    if (step.openDetails && Array.isArray(step.openDetails)) {
+        step.openDetails.forEach(function (selector) {
+            var details = document.querySelector(selector);
+            if (details && !details.open) details.open = true;
+        });
+    }
 
     const titleEl    = document.getElementById('tourTitle');
     const messageEl  = document.getElementById('tourMessage');
@@ -195,23 +213,27 @@ function showStep(stepIndex) {
 
         // Should we scroll?
         const shouldSkipScroll = step.skipScroll && !isBackNavigation;
-        let needsScroll = false;
+        var scrollTarget = false;
         if (!shouldSkipScroll) {
-            needsScroll = scrollToElement(element, highlightSelectors);
+            scrollTarget = scrollToElement(element, highlightSelectors);
         }
-
-        // Always position immediately — CSS transitions animate from old to new
-        positionHighlights(highlightSelectors);
-        positionMessageBox(element, step.position);
+        var needsScroll = scrollTarget !== false;
 
         if (needsScroll) {
-            // After scroll settles, re-position to correct viewport-clamping drift
+            // CSS slide + scroll run in parallel
+            positionHighlights(highlightSelectors);
+            positionMessageBox(element, step.position, { targetScrollTop: scrollTarget });
+            syncClipPathWithBoxes(); // override 450ms with indefinite
+
+            const stepAtScroll = currentStep;
             const onScrollSettled = function () {
+                if (currentStep !== stepAtScroll) return;
+                stopClipPathSync();
                 positionHighlights(highlightSelectors, { skipTransition: true });
-                positionMessageBox(element, step.position);
+                positionMessageBox(element, step.position, { skipTransition: true });
+                syncClipPathWithBoxes(300); // catch post-settle scroll drift
             };
 
-            // Use scrollend event when available, otherwise fallback to timeout
             if ('onscrollend' in window) {
                 const handler = function () {
                     window.removeEventListener('scrollend', handler);
@@ -220,14 +242,17 @@ function showStep(stepIndex) {
                     onScrollSettled();
                 };
                 window.addEventListener('scrollend', handler, { once: true });
-                // Safety fallback in case scrollend doesn't fire (e.g. no actual scroll)
                 highlightTimeout = setTimeout(function () {
                     window.removeEventListener('scrollend', handler);
                     onScrollSettled();
-                }, 600);
+                }, 1200);
             } else {
-                highlightTimeout = setTimeout(onScrollSettled, 400);
+                highlightTimeout = setTimeout(onScrollSettled, 800);
             }
+        } else {
+            // No scroll — let highlights and message box slide (or snap on first step)
+            positionHighlights(highlightSelectors);
+            positionMessageBox(element, step.position);
         }
     } else {
         // No element — centre the message box, clear highlights
@@ -250,6 +275,59 @@ function centreMessageBox(messageBox) {
     messageBox.style.right     = 'auto';
 }
 
+/** Scroll to afterElement and re-position highlights/message box. */
+function transitionToAfterState(step) {
+    var afterEl = document.querySelector(step.afterElement);
+    var afterSelectors = step.afterHighlightMultiple || [step.afterElement];
+    if (!afterEl) return;
+
+    // Capture step index so scroll-settle callback is ignored if user navigated away
+    var stepAtCall = currentStep;
+
+    // Update message text if provided
+    if (step.afterMessage) {
+        var messageEl = document.getElementById('tourMessage');
+        if (messageEl) messageEl.textContent = step.afterMessage;
+    }
+
+    var scrollTarget = scrollToElement(afterEl, afterSelectors);
+    var needsScroll = scrollTarget !== false;
+
+    if (needsScroll) {
+        // CSS slide + scroll run in parallel
+        positionHighlights(afterSelectors);
+        positionMessageBox(afterEl, step.position, { targetScrollTop: scrollTarget });
+        syncClipPathWithBoxes(); // override 450ms with indefinite
+
+        var onSettled = function () {
+            if (currentStep !== stepAtCall) return;
+            stopClipPathSync();
+            positionHighlights(afterSelectors, { skipTransition: true });
+            positionMessageBox(afterEl, step.position, { skipTransition: true });
+            syncClipPathWithBoxes(300); // catch post-settle scroll drift
+        };
+        if ('onscrollend' in window) {
+            var handler = function () {
+                window.removeEventListener('scrollend', handler);
+                clearTimeout(highlightTimeout);
+                highlightTimeout = null;
+                onSettled();
+            };
+            window.addEventListener('scrollend', handler, { once: true });
+            highlightTimeout = setTimeout(function () {
+                window.removeEventListener('scrollend', handler);
+                onSettled();
+            }, 1200);
+        } else {
+            highlightTimeout = setTimeout(onSettled, 800);
+        }
+    } else {
+        // No scroll — let highlights and message box slide to new position
+        positionHighlights(afterSelectors);
+        positionMessageBox(afterEl, step.position);
+    }
+}
+
 /** Set up waitFor conditions and Next button state for a step. */
 function setupWaitCondition(step, stepIndex, isBackNavigation, nextBtn) {
     if (step.waitFor) {
@@ -259,6 +337,10 @@ function setupWaitCondition(step, stepIndex, isBackNavigation, nextBtn) {
             if (nextBtn) {
                 nextBtn.disabled = false;
                 nextBtn.textContent = 'Next';
+            }
+            // If already met and step has afterElement, show the after state
+            if (alreadyMet && step.afterElement) {
+                transitionToAfterState(step);
             }
         } else {
             if (nextBtn) {
@@ -271,6 +353,10 @@ function setupWaitCondition(step, stepIndex, isBackNavigation, nextBtn) {
                     nextBtn.disabled = false;
                     nextBtn.textContent = 'Next';
                 }
+                // Scroll to afterElement and re-highlight when condition is met
+                if (step.afterElement) {
+                    transitionToAfterState(step);
+                }
                 if (step.autoNext === true) {
                     autoNextTimeout = setTimeout(nextStep, 1000);
                 }
@@ -281,15 +367,6 @@ function setupWaitCondition(step, stepIndex, isBackNavigation, nextBtn) {
             nextBtn.disabled = false;
             nextBtn.textContent = 'Next';
         }
-    }
-}
-
-/* Step Counter */
-
-function updateStepCounter(stepIndex) {
-    const counter = document.getElementById('tourStepCounter');
-    if (counter) {
-        counter.textContent = 'Step ' + (stepIndex + 1) + ' of ' + tourSteps.length;
     }
 }
 
@@ -419,6 +496,67 @@ function waitForCondition(condition, callback) {
         observer.observe(spectrumContainer, { attributes: true, attributeFilter: ['class'] });
         activeWaitCleanup = function () {
             observer.disconnect();
+        };
+
+    } else if (condition === 'gridFitComplete') {
+        if (typeof showGridFitOverlay !== 'undefined' && showGridFitOverlay === true) {
+            callback();
+            return;
+        }
+        const handler = function () {
+            window.removeEventListener('gridFitComplete', handler);
+            activeWaitCleanup = null;
+            callback();
+        };
+        window.addEventListener('gridFitComplete', handler);
+        activeWaitCleanup = function () {
+            window.removeEventListener('gridFitComplete', handler);
+        };
+
+    } else if (condition === 'gridSweepComplete') {
+        var container = document.getElementById('derivedPlotContainer');
+        if (container && !container.classList.contains('hidden')) {
+            callback();
+            return;
+        }
+        const handler = function () {
+            window.removeEventListener('gridSweepComplete', handler);
+            activeWaitCleanup = null;
+            callback();
+        };
+        window.addEventListener('gridSweepComplete', handler);
+        activeWaitCleanup = function () {
+            window.removeEventListener('gridSweepComplete', handler);
+        };
+
+    } else if (condition === 'sineFitComplete') {
+        if (typeof showSineFitOverlay !== 'undefined' && showSineFitOverlay === true) {
+            callback();
+            return;
+        }
+        const handler = function () {
+            window.removeEventListener('sineFitComplete', handler);
+            activeWaitCleanup = null;
+            callback();
+        };
+        window.addEventListener('sineFitComplete', handler);
+        activeWaitCleanup = function () {
+            window.removeEventListener('sineFitComplete', handler);
+        };
+
+    } else if (condition === 'sineSweepComplete') {
+        if (window._sineSweepDone === true) {
+            callback();
+            return;
+        }
+        const handler = function () {
+            window.removeEventListener('sineSweepComplete', handler);
+            activeWaitCleanup = null;
+            callback();
+        };
+        window.addEventListener('sineSweepComplete', handler);
+        activeWaitCleanup = function () {
+            window.removeEventListener('sineSweepComplete', handler);
         };
     }
 }

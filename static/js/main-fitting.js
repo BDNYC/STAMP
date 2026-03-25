@@ -5,6 +5,71 @@ const CHUNK_COLORS = [
     '#EC4899', '#14B8A6', '#F97316', '#6366F1',
 ];
 
+let _preFitDisplayMode = null;
+
+function _switchDisplayMode(mode) {
+  if (!currentSpectrumData) return;
+
+  const sd = currentSpectrumData;
+  const rawFlux = sd.rawFluxData;
+  const rawErr  = sd.rawErrorData;
+  const ref     = sd.referenceSpectrum;
+
+  if (mode === 'variability') {
+    // Need rawFluxData + referenceSpectrum to compute variability
+    if (!rawFlux || !ref) return;
+
+    for (let i = 0; i < rawFlux.length; i++) {
+      const r = ref[i];
+      if (!r || !isFinite(r) || r === 0) {
+        // Can't normalise — copy raw values as-is
+        for (let j = 0; j < rawFlux[i].length; j++) {
+          sd.fluxData[i][j] = rawFlux[i][j];
+          if (rawErr && rawErr[i]) sd.errorData[i][j] = rawErr[i][j];
+        }
+      } else {
+        for (let j = 0; j < rawFlux[i].length; j++) {
+          sd.fluxData[i][j] = (rawFlux[i][j] / r - 1) * 100;
+          if (rawErr && rawErr[i]) sd.errorData[i][j] = (rawErr[i][j] / r) * 100;
+        }
+      }
+    }
+  } else {
+    // mode === 'flux': copy raw values straight through
+    if (!rawFlux) return;
+
+    for (let i = 0; i < rawFlux.length; i++) {
+      for (let j = 0; j < rawFlux[i].length; j++) {
+        sd.fluxData[i][j] = rawFlux[i][j];
+        if (rawErr && rawErr[i]) sd.errorData[i][j] = rawErr[i][j];
+      }
+    }
+  }
+
+  // Recompute globalMin / globalMax from the new fluxData
+  let gMin = Infinity, gMax = -Infinity;
+  for (let i = 0; i < sd.fluxData.length; i++) {
+    const row = sd.fluxData[i];
+    for (let j = 0; j < row.length; j++) {
+      const v = row[j];
+      if (v !== null && !isNaN(v)) {
+        if (v < gMin) gMin = v;
+        if (v > gMax) gMax = v;
+      }
+    }
+  }
+  sd.globalMin = gMin;
+  sd.globalMax = gMax;
+
+  // Recompute locked ribbon range
+  sd.lockedRibbonRange = computeLockedRibbonRange(sd, null);
+
+  // Update metadata + radio button
+  sd.zAxisDisplay = mode;
+  const radio = document.querySelector(`input[name="zAxisDisplay"][value="${mode}"]`);
+  if (radio) radio.checked = true;
+}
+
 /**
  * Extract the current 1D light curve (time series) from spectrum data.
  * Handles both single-wavelength and band-averaged modes.
@@ -26,7 +91,7 @@ function _extractCurrentLightCurve() {
     const flux = [];
     const error = [];
     for (let j = 0; j < timeArray.length; j++) {
-      let sum = 0, cnt = 0, esum = 0;
+      let sum = 0, cnt = 0, esum = 0, ecnt = 0;
       for (let i = 0; i < wavelengths.length; i++) {
         const inBand = activeBands.some(b => wavelengths[i] >= b.start && wavelengths[i] <= b.end);
         if (!inBand) continue;
@@ -36,11 +101,11 @@ function _extractCurrentLightCurve() {
         cnt++;
         if (errData && errData[i] && errData[i][j] !== undefined) {
           const e = errData[i][j];
-          if (isFinite(e)) esum += e * e;
+          if (isFinite(e)) { esum += e * e; ecnt++; }
         }
       }
       flux.push(cnt ? sum / cnt : NaN);
-      error.push(cnt > 0 && esum > 0 ? Math.sqrt(esum / cnt) / Math.sqrt(cnt) : NaN);
+      error.push(ecnt > 0 ? Math.sqrt(esum / ecnt) / Math.sqrt(ecnt) : NaN);
     }
     return { time: Array.from(timeArray), flux, error };
   } else {
@@ -157,6 +222,11 @@ async function requestSineFit() {
     return;
   }
 
+  if (currentSpectrumData && currentSpectrumData.zAxisDisplay !== 'variability') {
+    _preFitDisplayMode = currentSpectrumData.zAxisDisplay;
+    _switchDisplayMode('variability');
+  }
+
   const curve = _extractCurrentLightCurve();
   if (!curve) { alert('No spectrum data loaded.'); return; }
 
@@ -194,6 +264,7 @@ async function requestSineFit() {
     showSineFitOverlay = true;
     updateFitParameterReadout('sine', result);
     updateSpectrumPlot();
+    window.dispatchEvent(new CustomEvent('sineFitComplete'));
     if (statusEl) statusEl.textContent = '';
   } catch (e) {
     alert('Sine fit request failed: ' + e.message);
@@ -207,6 +278,10 @@ async function requestSineFit() {
 function clearSineFit() {
   lastSineFitResult = null;
   showSineFitOverlay = false;
+  if (_preFitDisplayMode) {
+    _switchDisplayMode(_preFitDisplayMode);
+    _preFitDisplayMode = null;
+  }
   updateSpectrumPlot();
   const readout = document.getElementById('fittingParamsReadout');
   if (readout) readout.innerHTML = '';
@@ -221,6 +296,11 @@ async function requestGridFit() {
   if (spectrumMode !== 'vs_wavelength') {
     alert('Switch to vs_wavelength mode to fit against a model grid.');
     return;
+  }
+
+  if (currentSpectrumData && currentSpectrumData.zAxisDisplay !== 'flux') {
+    _preFitDisplayMode = currentSpectrumData.zAxisDisplay;
+    _switchDisplayMode('flux');
   }
 
   const selectEl = document.getElementById('fitGridSelect');
@@ -274,6 +354,7 @@ async function requestGridFit() {
       updateSpectrumPlot();
       renderChunkedResidualPlot(result);
       if (statusEl) statusEl.textContent = '';
+      window.dispatchEvent(new CustomEvent('gridFitComplete'));
     } else {
       // ── Single fit path (unchanged) ──
       const body = {
@@ -309,6 +390,7 @@ async function requestGridFit() {
         currentSpectrumData ? (currentSpectrumData.rawWavelengths || currentSpectrumData.wavelengthData) : null
       );
       if (statusEl) statusEl.textContent = '';
+      window.dispatchEvent(new CustomEvent('gridFitComplete'));
     }
   } catch (e) {
     alert('Grid fit request failed: ' + e.message);
@@ -323,6 +405,10 @@ function clearGridFit() {
   lastGridFitResult = null;
   lastChunkedFitResult = null;
   showGridFitOverlay = false;
+  if (_preFitDisplayMode) {
+    _switchDisplayMode(_preFitDisplayMode);
+    _preFitDisplayMode = null;
+  }
   updateSpectrumPlot();
   const residualContainer = document.getElementById('residualPlotContainer');
   if (residualContainer) residualContainer.classList.add('hidden');
@@ -406,6 +492,8 @@ async function requestSineSweep() {
       sineSweepJobId = null;
       if (result.success) {
         renderAmplitudeVsWavelengthPlot(result);
+        window._sineSweepDone = true;
+        window.dispatchEvent(new CustomEvent('sineSweepComplete'));
       } else {
         alert('Sweep failed: ' + (result.error || 'Unknown error'));
       }
@@ -460,6 +548,7 @@ async function requestGridSweep() {
       gridSweepJobId = null;
       if (result.success) {
         renderParameterTimeSeriesPlot(result);
+        window.dispatchEvent(new CustomEvent('gridSweepComplete'));
       } else {
         alert('Sweep failed: ' + (result.error || 'Unknown error'));
       }
@@ -473,6 +562,33 @@ async function requestGridSweep() {
 // Overlay Rendering
 
 /**
+ * Get the reference flux for the current sine-fit context.
+ * Handles both single-wavelength and band-averaged modes.
+ * @returns {number|null}
+ */
+function _getSineReferenceFlux() {
+  if (!currentSpectrumData || !currentSpectrumData.referenceSpectrum) return null;
+  const ref = currentSpectrumData.referenceSpectrum;
+  const wl = currentSpectrumData.rawWavelengths || currentSpectrumData.wavelengthData;
+
+  if (currentSpectrumData.bandAveraged && activeBands && activeBands.length >= 1) {
+    let sum = 0, cnt = 0;
+    for (let i = 0; i < wl.length; i++) {
+      if (activeBands.some(b => wl[i] >= b.start && wl[i] <= b.end)) {
+        if (isFinite(ref[i]) && ref[i] !== 0) { sum += ref[i]; cnt++; }
+      }
+    }
+    return cnt > 0 ? sum / cnt : null;
+  }
+
+  const idx = currentWavelengthIndex;
+  if (idx >= 0 && idx < ref.length && isFinite(ref[idx]) && ref[idx] !== 0) {
+    return ref[idx];
+  }
+  return null;
+}
+
+/**
  * Re-apply fit overlay traces after Plotly.newPlot completes.
  * Called from the setTimeout(0) hook in updateSpectrumPlot().
  */
@@ -481,9 +597,21 @@ function applyFitOverlays() {
   if (!plotEl || !plotEl.data) return;
 
   if (showSineFitOverlay && lastSineFitResult && spectrumMode === 'vs_time') {
+    let overlayY = lastSineFitResult.fit_values;
+
+    // Convert from raw Jy to variability (%) when display is not flux
+    if (currentSpectrumData && currentSpectrumData.zAxisDisplay !== 'flux') {
+      const refFlux = _getSineReferenceFlux();
+      if (refFlux) {
+        overlayY = lastSineFitResult.fit_values.map(v =>
+          isFinite(v) ? (v / refFlux - 1) * 100 : NaN
+        );
+      }
+    }
+
     Plotly.addTraces('spectrumPlot', {
       x: lastSineFitResult.fit_time,
-      y: lastSineFitResult.fit_values,
+      y: overlayY,
       type: 'scatter',
       mode: 'lines',
       line: { color: '#F59E0B', width: 2.5 },
@@ -564,6 +692,43 @@ function applyFitOverlays() {
 
     if (traces.length > 0) {
       Plotly.addTraces('spectrumPlot', traces);
+    }
+  }
+
+  // Expand y-axis if any overlay trace extends beyond the current range
+  const overlayYValues = [];
+  for (let i = 0; i < plotEl.data.length; i++) {
+    const name = plotEl.data[i].name || '';
+    if (name === 'Sine Fit' || name === 'Grid Fit' || name.startsWith('Chunk')) {
+      const yArr = plotEl.data[i].y;
+      if (yArr) {
+        for (let j = 0; j < yArr.length; j++) {
+          const v = yArr[j];
+          if (isFinite(v)) overlayYValues.push(v);
+        }
+      }
+    }
+  }
+
+  if (overlayYValues.length > 0 && plotEl.layout && plotEl.layout.yaxis && plotEl.layout.yaxis.range) {
+    const curMin = plotEl.layout.yaxis.range[0];
+    const curMax = plotEl.layout.yaxis.range[1];
+    let oMin = overlayYValues[0], oMax = overlayYValues[0];
+    for (let i = 1; i < overlayYValues.length; i++) {
+      if (overlayYValues[i] < oMin) oMin = overlayYValues[i];
+      if (overlayYValues[i] > oMax) oMax = overlayYValues[i];
+    }
+
+    if (oMin < curMin || oMax > curMax) {
+      const newMin = Math.min(curMin, oMin);
+      const newMax = Math.max(curMax, oMax);
+      const pad = (newMax - newMin) * 0.03 || 1e-6;
+      Plotly.relayout('spectrumPlot', {
+        'yaxis.range': [
+          oMin < curMin ? newMin - pad : curMin,
+          oMax > curMax ? newMax + pad : curMax,
+        ]
+      });
     }
   }
 }
@@ -684,12 +849,31 @@ function renderAmplitudeVsWavelengthPlot(result) {
   if (!container) return;
   container.classList.remove('hidden');
 
+  const isVariability = currentSpectrumData && currentSpectrumData.zAxisDisplay !== 'flux';
+  const ref = currentSpectrumData ? currentSpectrumData.referenceSpectrum : null;
+  const refWl = currentSpectrumData ? (currentSpectrumData.rawWavelengths || currentSpectrumData.wavelengthData) : null;
+
   const n_sines = result.n_sines || 1;
   const traces = [];
   const colors = ['#F59E0B', '#EF4444', '#10B981'];
 
   for (let s = 0; s < n_sines; s++) {
-    const amps = result.amplitudes.map(row => row[s]);
+    let amps = result.amplitudes.map(row => row[s]);
+
+    // Convert amplitudes from Jy to % using per-wavelength reference spectrum
+    if (isVariability && ref && refWl) {
+      amps = result.wavelengths.map((wl, i) => {
+        // Find closest reference wavelength index
+        let bestIdx = 0, bestDist = Math.abs(refWl[0] - wl);
+        for (let k = 1; k < refWl.length; k++) {
+          const d = Math.abs(refWl[k] - wl);
+          if (d < bestDist) { bestDist = d; bestIdx = k; }
+        }
+        const r = ref[bestIdx];
+        return (r && isFinite(r) && r !== 0) ? (result.amplitudes[i][s] / r) * 100 : NaN;
+      });
+    }
+
     traces.push({
       x: result.wavelengths,
       y: amps,
@@ -701,13 +885,15 @@ function renderAmplitudeVsWavelengthPlot(result) {
     });
   }
 
+  const ampLabel = isVariability ? 'Amplitude (%)' : 'Amplitude (Jy)';
+
   const layout = {
     template: 'plotly_dark',
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor: 'rgba(0,0,0,0)',
     font: { color: '#ffffff' },
     xaxis: { title: 'Wavelength (um)', gridcolor: 'rgba(74,144,217,0.12)' },
-    yaxis: { title: 'Amplitude', gridcolor: 'rgba(74,144,217,0.12)' },
+    yaxis: { title: ampLabel, gridcolor: 'rgba(74,144,217,0.12)' },
     margin: { l: 60, r: 40, t: 30, b: 50 },
     height: 400,
     showlegend: n_sines > 1,
@@ -798,10 +984,28 @@ function updateFitParameterReadout(type, result) {
   if (!el) return;
 
   if (type === 'sine') {
+    const isVariability = currentSpectrumData && currentSpectrumData.zAxisDisplay !== 'flux';
+    const refFlux = _getSineReferenceFlux();
+
+    let displayOffset, displayUnit;
+    if (isVariability && refFlux) {
+      displayOffset = ((result.offset / refFlux - 1) * 100).toFixed(4);
+      displayUnit = '%';
+    } else {
+      displayOffset = result.offset.toFixed(6);
+      displayUnit = 'Jy';
+    }
+
     let html = `<span style="color: #F59E0B; font-weight: 600;">Sinusoidal Fit</span><br>`;
-    html += `<span style="color: var(--text-secondary);">Offset: ${result.offset.toFixed(6)}</span><br>`;
+    html += `<span style="color: var(--text-secondary);">Offset: ${displayOffset} ${displayUnit}</span><br>`;
     result.params.forEach((p, i) => {
-      html += `<span style="color: var(--text-secondary);">Sine ${i + 1}: A=${p.amplitude.toFixed(6)}, P=${p.period.toFixed(4)} hr, φ=${p.phase.toFixed(3)} rad</span><br>`;
+      let displayAmp;
+      if (isVariability && refFlux) {
+        displayAmp = ((p.amplitude / refFlux) * 100).toFixed(4) + ' %';
+      } else {
+        displayAmp = p.amplitude.toFixed(6) + ' Jy';
+      }
+      html += `<span style="color: var(--text-secondary);">Sine ${i + 1}: A=${displayAmp}, P=${p.period.toFixed(4)} hr, φ=${p.phase.toFixed(3)} rad</span><br>`;
     });
     html += `<span style="color: var(--text-dim);">χ²_red = ${result.reduced_chi_squared.toFixed(3)}</span>`;
     el.innerHTML = html;

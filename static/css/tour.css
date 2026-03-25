@@ -187,13 +187,6 @@
     background: #4b5563;
 }
 
-.tour-step-counter {
-    color: #9ca3af;
-    font-size: 12px;
-    text-align: center;
-    margin-top: 12px;
-}
-
 /* Dark Overlay -- persistent full-screen dimming layer */
 #tourOverlay {
     position: fixed;
@@ -215,6 +208,7 @@
 /* Highlight Box Pool -- reusable boxes that animate between positions */
 .tour-highlight-box {
     position: absolute;
+    box-sizing: border-box;
     border: 3px solid #ffffff;
     border-radius: 8px;
     box-shadow:
@@ -269,6 +263,16 @@
 .tour-elevated {
     position: relative !important;
     z-index: 9999 !important;
+    overflow: hidden !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* Neutralize ancestors' stacking context during tour so .tour-elevated escapes */
+.tour-elevated-ancestor {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    transition: none !important;
 }
 
 @keyframes slideInRight {

@@ -48,7 +48,6 @@ def _read_model_spectrum(filepath, grid_type=None):
         with fits.open(filepath) as hdul:
             if len(hdul) > 1 and hdul[1].data is not None:
                 tbl = hdul[1].data
-                col_names = [c.lower() for c in tbl.columns.names]
                 wl_col = next((c for c in tbl.columns.names
                                if c.lower() in ('wavelength', 'wave', 'lambda', 'wl')), tbl.columns.names[0])
                 fl_col = next((c for c in tbl.columns.names
@@ -161,7 +160,7 @@ def load_grid_from_directory(grid_dir, grid_type=None):
             # F_nu [Jy] = F_lambda [W/m2/m] * lambda_m^2 / (c * 1e-26)
             conv = wl_m ** 2 / (c * 1e-26)
         else:
-            # erg/s/cm2/A → W/m2/m factor is 1e7 (1e-3 * 1e10)
+            # erg/s/cm2/A → W/m2/m: 1e-7 (erg→W) × 1e4 (cm²→m²) × 1e10 (Å→m) = 1e7
             conv = 1e7 * wl_m ** 2 / (c * 1e-26)
 
         # Broadcast: conv is (W,), spectra_array is (N, W)

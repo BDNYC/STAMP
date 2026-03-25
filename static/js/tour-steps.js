@@ -15,7 +15,7 @@ let currentStep = 0;
 // eslint-disable-next-line no-unused-vars
 let tourActive = false;
 
-/* Tour step definitions (23 steps) */
+/* Tour step definitions (26 steps) */
 
 /** Complete tour configuration array. */
 const tourSteps = [
@@ -134,13 +134,14 @@ const tourSteps = [
 
     {
         id: 'spectrum-viewer',
-        element: '#spectrumContainer',
+        element: '#spectrumViewerArea',
         title: 'Spectrum Viewer',
         message: 'This shows detailed spectral data at the selected time point.',
         position: 'left',
         waitFor: null,
         action: null,
-        skipScroll: false
+        skipScroll: false,
+        highlightMultiple: ['#spectrumViewerArea', '#enableSurfaceClick']
     },
     {
         id: 'spectrum-bands',
@@ -151,7 +152,7 @@ const tourSteps = [
         waitFor: null,
         action: null,
         skipScroll: true,
-        highlightMultiple: ['#spectrumContainer', '#spectrumBandButtons']
+        highlightMultiple: ['#spectrumViewerArea', '#spectrumBandButtons']
     },
     {
         id: 'error-bars',
@@ -162,7 +163,7 @@ const tourSteps = [
         waitFor: null,
         action: null,
         skipScroll: true,
-        highlightMultiple: ['#spectrumContainer', '#toggleErrorBars']
+        highlightMultiple: ['#spectrumViewerArea', '#toggleErrorBars']
     },
     {
         id: 'navigation-controls',
@@ -173,8 +174,38 @@ const tourSteps = [
         waitFor: null,
         action: null,
         skipScroll: true,
-        highlightMultiple: ['#spectrumContainer', '#prevSpectrumBtn', '#nextSpectrumBtn', '#playAnimationBtn']
+        highlightMultiple: ['#spectrumViewerArea', '#prevSpectrumBtn', '#nextSpectrumBtn', '#playAnimationBtn']
     },
+    {
+        id: 'grid-fitting',
+        element: '#fitGridSelect',
+        title: 'Spectral Grid Fitting',
+        message: 'Select a model atmosphere grid from the dropdown and hit Fit Spectrum. You can also set a chunk count to divide the spectrum into independent wavelength regions, each fit separately.',
+        position: 'right',
+        waitFor: 'gridFitComplete',
+        action: null,
+        skipScroll: false,
+        openDetails: ['#gridFittingDetails'],
+        highlightMultiple: ['#fitGridSelect', '#fitGridBtn', '#chunkCountInput'],
+        afterElement: '#spectrumViewerArea',
+        afterHighlightMultiple: ['#spectrumViewerArea'],
+        afterMessage: 'The best-fit model is now overlaid on the spectrum. Best-fit parameters and residuals appear below the controls.'
+    },
+    {
+        id: 'parameter-sweep',
+        element: '#gridSweepBtn',
+        title: 'Parameter Time Series',
+        message: 'Hit this button to sweep the grid fit across every timestep.',
+        position: 'right',
+        waitFor: 'gridSweepComplete',
+        action: null,
+        skipScroll: false,
+        openDetails: ['#gridFittingDetails'],
+        afterElement: '#derivedPlotContainer',
+        afterHighlightMultiple: ['#derivedPlotContainer'],
+        afterMessage: 'Best-fit parameters like Teff and log(g) are plotted across time, showing how they evolve.'
+    },
+
     {
         id: 'x-axis-switch',
         element: '#toggleSpectrumModeBtn',
@@ -183,8 +214,8 @@ const tourSteps = [
         position: 'right',
         waitFor: null,
         action: null,
-        skipScroll: true,
-        highlightMultiple: ['#spectrumContainer', '#toggleSpectrumModeBtn']
+        skipScroll: false,
+        highlightMultiple: ['#spectrumViewerArea', '#toggleSpectrumModeBtn']
     },
     {
         id: 'time-mode-bands',
@@ -195,7 +226,37 @@ const tourSteps = [
         waitFor: null,
         action: null,
         skipScroll: true,
-        highlightMultiple: ['#spectrumContainer', '#spectrumBandButtons']
+        highlightMultiple: ['#spectrumViewerArea', '#spectrumBandButtons']
+    },
+
+    {
+        id: 'sine-fitting',
+        element: '#fitSineBtn',
+        title: 'Sinusoidal Fitting',
+        message: 'In time mode, fit up to three sinusoidal components to the light curve. Provide a period guess in hours or leave it blank to auto-detect.',
+        position: 'right',
+        waitFor: 'sineFitComplete',
+        action: null,
+        skipScroll: false,
+        openDetails: ['#sineFittingDetails'],
+        highlightMultiple: ['#fitSineBtn', '#fitNSines', '#fitPeriodGuess'],
+        afterElement: '#spectrumViewerArea',
+        afterHighlightMultiple: ['#spectrumViewerArea'],
+        afterMessage: 'The sinusoidal fit is now overlaid on the light curve.'
+    },
+    {
+        id: 'amplitude-sweep',
+        element: '#sineSweepBtn',
+        title: 'Amplitude vs Wavelength',
+        message: 'Sweep the sine fit across all wavelengths to map how variability amplitude changes across the spectrum.',
+        position: 'right',
+        waitFor: 'sineSweepComplete',
+        action: null,
+        skipScroll: false,
+        highlightMultiple: ['#sineSweepBtn'],
+        afterElement: '#derivedPlotContainer',
+        afterHighlightMultiple: ['#derivedPlotContainer'],
+        afterMessage: 'Amplitude vs wavelength shows how variability strength changes across the spectrum.'
     },
 
     {

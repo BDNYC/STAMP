@@ -36,7 +36,6 @@
         <button id="tourPrevBtn" class="hidden">Back</button>
         <button id="tourNextBtn">Next</button>
     </div>
-    <div class="tour-step-counter" id="tourStepCounter"></div>
 </div>
 
     <div class="min-h-screen">
@@ -140,8 +139,8 @@
                                 <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
                             </svg>
                             <p class="text-sm" style="color: var(--text-secondary);">
-                                <strong style="color: var(--text-primary);">Demo dataset preloaded:</strong> JWST Program GO 1647.
-                                Click "Process MAST Data" to explore or choose your own file below.
+                                <strong style="color: var(--text-primary);">Demo dataset preloaded:</strong> JWST GO 3548.
+                                <a href="https://doi.org/10.3847/2041-8213/ad9eaf" target="_blank" rel="noopener" style="color: var(--accent-primary);">McCarthy &amp; Vos et al. 2025</a>
                             </p>
                         </div>
                     </div>
@@ -296,6 +295,7 @@
                 </div>
 
                 <div id="spectrumContainer" class="plot-wrapper w-full hidden">
+                    <div id="spectrumViewerArea">
                     <div class="flex justify-between items-center mb-3">
                         <h3 class="text-lg font-medium" style="color: var(--text-primary);">
                             <span id="spectrumTitle">Spectrum at Time</span>
@@ -325,13 +325,14 @@
                             Show Error
                         </label>
                     </div>
+                    </div>
 
                     <!-- Model Fitting Controls (opt-in, collapsible) -->
-                    <details class="mt-4" style="border: 1px solid rgba(224,168,48,0.2); border-radius: 8px; padding: 12px;">
+                    <details id="modelFittingDetails" open class="mt-4" style="border: 1px solid rgba(224,168,48,0.2); border-radius: 8px; padding: 12px;">
                         <summary style="color: var(--text-primary); cursor: pointer; font-weight: 600;">Model Fitting</summary>
 
                         <!-- Sinusoidal Fitting -->
-                        <details class="mt-3" style="border-left: 3px solid #F59E0B; padding-left: 12px;">
+                        <details id="sineFittingDetails" class="mt-3" style="border-left: 3px solid #F59E0B; padding-left: 12px;">
                             <summary style="color: #F59E0B; cursor: pointer; font-weight: 500;">Sinusoidal Fitting</summary>
                             <div class="mt-2 flex flex-wrap items-center gap-2">
                                 <label class="text-sm" style="color: var(--text-secondary);">
@@ -349,7 +350,7 @@
                         </details>
 
                         <!-- Spectral Grid Fitting -->
-                        <details class="mt-3" style="border-left: 3px solid #EF4444; padding-left: 12px;">
+                        <details id="gridFittingDetails" class="mt-3" style="border-left: 3px solid #EF4444; padding-left: 12px;">
                             <summary style="color: #EF4444; cursor: pointer; font-weight: 500;">Spectral Grid Fitting</summary>
                             <div class="mt-2 flex flex-wrap items-center gap-2">
                                 <label class="text-sm" style="color: var(--text-secondary);">

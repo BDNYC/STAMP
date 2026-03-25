@@ -22,6 +22,107 @@ function unlockScroll() {
     window.removeEventListener('keydown', _keyScrollHandler);
 }
 
+/* Clip-path ↔ highlight-box sync (rAF loop) */
+
+var _clipSyncRAF = null;
+
+function stopClipPathSync() {
+    if (_clipSyncRAF !== null) {
+        cancelAnimationFrame(_clipSyncRAF);
+        _clipSyncRAF = null;
+    }
+}
+
+/** Remove holes fully contained within another hole (prevents winding cancellation). */
+function filterContainedHoles(holes) {
+    return holes.filter(function (h, i) {
+        for (var j = 0; j < holes.length; j++) {
+            if (i === j) continue;
+            var o = holes[j];
+            if (h.top >= o.top && h.bottom <= o.bottom &&
+                h.left >= o.left && h.right <= o.right) {
+                return false;
+            }
+        }
+        return true;
+    });
+}
+
+/**
+ * Single source of truth for applying the overlay clip-path polygon.
+ * Takes an array of viewport-pixel hole objects and sets the overlay's clip-path.
+ *
+ * @param {Array<{top:number, left:number, bottom:number, right:number}>} holes
+ */
+function applyClipPathFromHoles(holes) {
+    var overlay = document.getElementById('tourOverlay');
+    if (!overlay) return;
+
+    holes = filterContainedHoles(holes);
+
+    if (holes.length === 0) {
+        overlay.style.clipPath = '';
+        return;
+    }
+
+    holes.sort(function (a, b) { return a.top - b.top; });
+
+    var parts = ['0% 0%, 100% 0%, 100% 100%, 0% 100%'];
+    holes.forEach(function (h) {
+        parts.push(
+            '0px ' + h.top + 'px',
+            h.left  + 'px ' + h.top    + 'px',
+            h.left  + 'px ' + h.bottom + 'px',
+            h.right + 'px ' + h.bottom + 'px',
+            h.right + 'px ' + h.top    + 'px',
+            '0px ' + h.top + 'px'
+        );
+    });
+    parts.push('0% 0%');
+    overlay.style.clipPath = 'polygon(' + parts.join(', ') + ')';
+}
+
+/**
+ * Run a requestAnimationFrame loop that reads the current getBoundingClientRect()
+ * of every visible highlight box each frame and rebuilds the overlay clip-path
+ * so the cutout slides in sync with the CSS-transitioning boxes.
+ * Self-terminates after `duration` ms.
+ */
+function syncClipPathWithBoxes(duration) {
+    stopClipPathSync();
+    var overlay = document.getElementById('tourOverlay');
+    if (!overlay) return;
+
+    var start = performance.now();
+
+    function tick(now) {
+        if (duration && (now - start > duration)) {
+            _clipSyncRAF = null;
+            return;
+        }
+        var boxes = document.querySelectorAll('.tour-highlight-box.visible');
+        var holes = [];
+        boxes.forEach(function (box) {
+            var r = box.getBoundingClientRect();
+            if (r.width === 0 && r.height === 0) return;
+            // Box already includes the 5px padding around the element,
+            // so its rect IS the cutout (no extra pad needed).
+            holes.push({
+                top:    r.top,
+                left:   r.left,
+                bottom: r.bottom,
+                right:  r.right
+            });
+        });
+
+        applyClipPathFromHoles(holes);
+
+        _clipSyncRAF = requestAnimationFrame(tick);
+    }
+
+    _clipSyncRAF = requestAnimationFrame(tick);
+}
+
 /* Overlay control */
 
 /** Show the persistent dimming overlay (called once at tour start). */
@@ -58,18 +159,42 @@ function hideOverlay() {
  */
 function positionHighlights(selectors, opts) {
     opts = opts || {};
+    stopClipPathSync(); // cancel any previous rAF loop
+
     const pool = document.querySelectorAll('.tour-highlight-box');
     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
     const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
 
-    // Clear previously elevated elements
+    // Clear previously elevated elements and ancestors
     document.querySelectorAll('.tour-elevated').forEach(function (el) {
         el.classList.remove('tour-elevated');
     });
+    document.querySelectorAll('.tour-elevated-ancestor').forEach(function (el) {
+        el.classList.remove('tour-elevated-ancestor');
+    });
 
-    selectors.forEach(function (selector, i) {
-        if (i >= pool.length) return; // pool exhausted
+    // --- Pass 1: Resolve elements, apply elevated classes BEFORE measuring ---
+    // This ensures rects reflect the element's final CSS state (position, overflow, etc.)
+    var elements = [];
+    selectors.forEach(function (selector) {
         var el = document.querySelector(selector);
+        elements.push(el);
+        if (!el) return;
+
+        el.classList.add('tour-elevated');
+
+        var wrapper = el.closest('.plot-wrapper');
+        if (wrapper && wrapper !== el) {
+            wrapper.classList.add('tour-elevated-ancestor');
+        }
+    });
+
+    // --- Pass 2: Measure rects and position boxes ---
+    var anySliding = false;
+    var computedHoles = [];
+
+    elements.forEach(function (el, i) {
+        if (i >= pool.length) return; // pool exhausted
         var box = pool[i];
 
         if (!el) {
@@ -78,16 +203,47 @@ function positionHighlights(selectors, opts) {
         }
 
         var rect = el.getBoundingClientRect();
+        var newTop    = rect.top  + scrollTop  - 5;
+        var newLeft   = rect.left + scrollLeft - 5;
+        var newWidth  = rect.width  + 10;
+        var newHeight = rect.height + 10;
 
-        if (opts.skipTransition) {
+        // Collect clip-path hole from the SAME rect used for the box
+        // (viewport coordinates with 5px padding — matches box positioning)
+        computedHoles.push({
+            top:    rect.top    - 5,
+            left:   rect.left   - 5,
+            bottom: rect.bottom + 5,
+            right:  rect.right  + 5
+        });
+
+        var alreadyVisible = box.classList.contains('visible');
+
+        if (alreadyVisible && !opts.skipTransition) {
+            // Step-to-step slide: just update position props.
+            // CSS transition on the box slides it smoothly.
+            box.style.top    = newTop    + 'px';
+            box.style.left   = newLeft   + 'px';
+            box.style.width  = newWidth  + 'px';
+            box.style.height = newHeight + 'px';
+            anySliding = true;
+        } else {
+            // First appearance or forced snap: disable transitions, set coords
             box.classList.add('no-transition');
-        }
+            box.classList.remove('visible');
 
-        box.style.top  = (rect.top  + scrollTop  - 5) + 'px';
-        box.style.left = (rect.left + scrollLeft - 5) + 'px';
-        box.style.width  = (rect.width  + 10) + 'px';
-        box.style.height = (rect.height + 10) + 'px';
-        box.classList.add('visible');
+            box.style.top    = newTop    + 'px';
+            box.style.left   = newLeft   + 'px';
+            box.style.width  = newWidth  + 'px';
+            box.style.height = newHeight + 'px';
+
+            // Force reflow so snapped position applies
+            box.offsetHeight;
+            box.classList.remove('no-transition');
+
+            // Fade in via opacity transition at the correct position
+            box.classList.add('visible');
+        }
 
         // Accent the feature boxes (index > 0) in multi-element steps
         if (selectors.length > 1 && i > 0) {
@@ -96,19 +252,10 @@ function positionHighlights(selectors, opts) {
             box.classList.remove('tour-highlight-accent');
         }
 
-        // Elevate the actual DOM element above the overlay so it appears bright
-        el.classList.add('tour-elevated');
-
         // Make interactive elements clickable during waitFor steps
         var step = tourSteps[currentStep];
         if (step && (step.waitFor || step.action)) {
             el.style.pointerEvents = 'auto';
-        }
-
-        if (opts.skipTransition) {
-            // Force reflow so the position applies, then re-enable transitions
-            box.offsetHeight;
-            box.classList.remove('no-transition');
         }
     });
 
@@ -117,58 +264,51 @@ function positionHighlights(selectors, opts) {
         pool[i].classList.remove('visible');
     }
 
-    // Cut a hole in the overlay so highlighted content appears at full brightness
-    updateOverlayClipPath(selectors);
+    // Sync overlay cutout with highlight boxes
+    if (anySliding) {
+        // rAF loop keeps clip-path in sync with CSS-transitioning boxes
+        syncClipPathWithBoxes(450); // 0.35s transition + 100ms buffer
+    } else {
+        // One-shot snap using the same rects we positioned boxes with
+        applyClipPathFromHoles(computedHoles);
+    }
 }
 
 /**
- * Update the overlay's clip-path to cut out the highlighted region so the
- * content beneath appears at full brightness (not dimmed by the overlay).
- * Uses evenodd fill: outer rect (full screen) + inner rect = transparent hole.
+ * Update the overlay's clip-path to cut out highlighted regions so content
+ * beneath appears at full brightness (not dimmed by the overlay).
+ * Delegates to applyClipPathFromHoles for the actual polygon building.
  *
  * @param {string[]} selectors  CSS selectors for highlighted elements
  */
 function updateOverlayClipPath(selectors) {
-    var overlay = document.getElementById('tourOverlay');
-    if (!overlay) return;
-
     if (!selectors || selectors.length === 0) {
-        overlay.style.clipPath = '';
+        var overlay = document.getElementById('tourOverlay');
+        if (overlay) overlay.style.clipPath = '';
         return;
     }
 
-    var rects = selectors.map(function (sel) {
+    var pad = 5;
+    var holes = [];
+    selectors.forEach(function (sel) {
         var el = document.querySelector(sel);
-        return el ? el.getBoundingClientRect() : null;
-    }).filter(Boolean);
+        if (!el) return;
+        var r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) return;
+        holes.push({
+            top:    r.top    - pad,
+            left:   r.left   - pad,
+            bottom: r.bottom + pad,
+            right:  r.right  + pad
+        });
+    });
 
-    if (rects.length === 0) {
-        overlay.style.clipPath = '';
-        return;
-    }
-
-    // Bounding box of all highlighted elements, with 5px padding to match highlight boxes
-    var pad = 8;
-    var top    = Math.min.apply(null, rects.map(function (r) { return r.top; }))    - pad;
-    var left   = Math.min.apply(null, rects.map(function (r) { return r.left; }))   - pad;
-    var bottom = Math.max.apply(null, rects.map(function (r) { return r.bottom; })) + pad;
-    var right  = Math.max.apply(null, rects.map(function (r) { return r.right; }))  + pad;
-
-    // Non-evenodd polygon: trace outer border, bridge along left edge to
-    // cutout, trace cutout, bridge back, close. No diagonal connecting edges.
-    overlay.style.clipPath = 'polygon(' +
-        '0% 0%, 100% 0%, 100% 100%, 0% 100%, ' +   // outer border CW
-        '0px ' + top + 'px, ' +                       // bridge: down left edge to cutout top
-        left + 'px ' + top + 'px, ' +                 // cutout top-left
-        left + 'px ' + bottom + 'px, ' +              // cutout bottom-left
-        right + 'px ' + bottom + 'px, ' +             // cutout bottom-right
-        right + 'px ' + top + 'px, ' +                // cutout top-right
-        '0px ' + top + 'px, ' +                       // bridge: back to left edge
-        '0% 0%)';
+    applyClipPathFromHoles(holes);
 }
 
 /** Fade out all highlight boxes and remove elevation from elements. */
 function clearHighlights() {
+    stopClipPathSync();
     document.querySelectorAll('.tour-highlight-box').forEach(function (box) {
         box.classList.remove('visible');
         box.classList.remove('tour-highlight-accent');
@@ -176,6 +316,9 @@ function clearHighlights() {
     document.querySelectorAll('.tour-elevated').forEach(function (el) {
         el.classList.remove('tour-elevated');
         el.style.pointerEvents = '';
+    });
+    document.querySelectorAll('.tour-elevated-ancestor').forEach(function (el) {
+        el.classList.remove('tour-elevated-ancestor');
     });
 
     // Remove overlay cutout so it returns to full coverage
@@ -210,6 +353,10 @@ function scrollToElement(element, highlightSelectors) {
                 right:  Math.max.apply(null, rects.map(function (r) { return r.right; }))
             };
         }
+        // If combined bbox is too tall, fall back to primary element only
+        if (rect && (rect.bottom - rect.top) > window.innerHeight * 1.5) {
+            rect = null;
+        }
     }
     if (!rect) {
         rect = element.getBoundingClientRect();
@@ -230,24 +377,43 @@ function scrollToElement(element, highlightSelectors) {
     var centre    = (absTop + absBottom) / 2;
     var target    = Math.max(0, centre - (window.innerHeight / 2));
 
+    // Only clamp to show edges when the element fits in the viewport;
+    // for tall elements the centered position is already optimal.
+    var elementHeight = absBottom - absTop;
+    var availableHeight = window.innerHeight - topMargin - bottomMargin;
+    if (elementHeight <= availableHeight) {
+        // Element fits — clamp to keep both edges visible with margins
+        target = Math.min(target, absTop - topMargin);
+        var bottomClamp = absBottom - window.innerHeight + bottomMargin;
+        target = Math.max(target, bottomClamp);
+    }
+
+    target = Math.max(0, target);
+
     // Clamp so we don't over-scroll past the document
     var docHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
     var maxScroll = Math.max(0, docHeight - window.innerHeight);
     target = Math.min(target, maxScroll);
 
     window.scrollTo({ top: target, behavior: 'smooth' });
-    return true;
+    return target || 0.1;   // avoid falsy 0 — callers check !== false
 }
 
 /* Message box positioning */
 
 /** Position the tour message box relative to the highlighted element. */
-function positionMessageBox(element, position) {
+function positionMessageBox(element, position, opts) {
+    opts = opts || {};
     var messageBox = document.getElementById('tourMessageBox');
     if (!messageBox) return;
 
+    if (opts.skipTransition) {
+        messageBox.classList.add('no-transition');
+    }
+
     var rect      = element.getBoundingClientRect();
     var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    var clampTop  = (opts.targetScrollTop !== undefined) ? opts.targetScrollTop : scrollTop;
     var container = document.querySelector('.max-w-4xl');
     var containerRect = container ? container.getBoundingClientRect() : null;
     var step      = tourSteps[currentStep];
@@ -275,17 +441,23 @@ function positionMessageBox(element, position) {
             var plotCentre = plotRect.top + (plotRect.height / 2);
             top = plotCentre - (messageBox.offsetHeight / 2) + scrollTop;
         } else {
-            top = scrollTop + (viewportHeight / 2) - (messageBox.offsetHeight / 2);
+            top = clampTop + (viewportHeight / 2) - (messageBox.offsetHeight / 2);
         }
-        top = Math.max(scrollTop + 80, Math.min(scrollTop + viewportHeight - messageBox.offsetHeight - 80, top));
+        top = Math.max(clampTop + 80, Math.min(clampTop + viewportHeight - messageBox.offsetHeight - 80, top));
 
         applyMessageBoxPosition(messageBox, left, top);
+        if (opts.skipTransition) {
+            messageBox.offsetHeight;
+            messageBox.classList.remove('no-transition');
+        }
         return;
     }
 
     // ── Strategy 2: Spectrum / heatmap steps (right side, lower viewport) ──
     var spectrumSteps = ['spectrum-viewer', 'spectrum-bands', 'error-bars',
-                         'navigation-controls', 'x-axis-switch', 'time-mode-bands'];
+                         'navigation-controls', 'grid-fitting',
+                         'parameter-sweep', 'x-axis-switch', 'time-mode-bands',
+                         'sine-fitting', 'amplitude-sweep'];
     var heatmapSteps  = ['heatmap', 'heatmap-bands'];
     if (step && (spectrumSteps.indexOf(step.id) !== -1 || heatmapSteps.indexOf(step.id) !== -1)) {
         if (containerRect) {
@@ -301,13 +473,17 @@ function positionMessageBox(element, position) {
             left = viewportWidth - messageBoxWidth - 40;
         }
 
-        top = scrollTop + (viewportHeight * 0.95) - (messageBox.offsetHeight / 2);
-        var maxTop = scrollTop + viewportHeight - messageBox.offsetHeight - 30;
+        top = clampTop + (viewportHeight * 0.80) - (messageBox.offsetHeight / 2);
+        var maxTop = clampTop + viewportHeight - messageBox.offsetHeight - 50;
         if (top > maxTop) top = maxTop;
-        var minTop = scrollTop + (viewportHeight * 0.5);
+        var minTop = clampTop + (viewportHeight * 0.5);
         if (top < minTop) top = minTop;
 
         applyMessageBoxPosition(messageBox, left, top);
+        if (opts.skipTransition) {
+            messageBox.offsetHeight;
+            messageBox.classList.remove('no-transition');
+        }
         return;
     }
 
@@ -338,22 +514,26 @@ function positionMessageBox(element, position) {
     // Vertically centre on the highlighted element
     var elCentreY = rect.top + (rect.height / 2) + scrollTop;
     top = elCentreY - (messageBox.offsetHeight / 2);
-    top = Math.max(scrollTop + 20, Math.min(scrollTop + viewportHeight - messageBox.offsetHeight - 20, top));
+    top = Math.max(clampTop + 20, Math.min(clampTop + viewportHeight - messageBox.offsetHeight - 20, top));
 
     // Small elements near page top: centre with generous padding
     if (rect.top < 300 && rect.height < 200) {
         var mid = rect.top + (rect.height / 2) + scrollTop;
         top = mid - (messageBox.offsetHeight / 2);
-        top = Math.max(scrollTop + 80, Math.min(scrollTop + viewportHeight - messageBox.offsetHeight - 80, top));
+        top = Math.max(clampTop + 80, Math.min(clampTop + viewportHeight - messageBox.offsetHeight - 80, top));
     }
 
     // ── Strategy 5: File-selection override ──
     if (step && step.id === 'file-selection') {
-        top = scrollTop + (viewportHeight * 0.35);
-        top = Math.max(scrollTop + 100, Math.min(scrollTop + viewportHeight - messageBox.offsetHeight - 100, top));
+        top = clampTop + (viewportHeight * 0.35);
+        top = Math.max(clampTop + 100, Math.min(clampTop + viewportHeight - messageBox.offsetHeight - 100, top));
     }
 
     applyMessageBoxPosition(messageBox, left, top);
+    if (opts.skipTransition) {
+        messageBox.offsetHeight;
+        messageBox.classList.remove('no-transition');
+    }
 }
 
 /** Apply final position to the message box. */

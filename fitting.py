@@ -7,6 +7,16 @@ import numpy as np
 from scipy.optimize import curve_fit
 
 
+def _nan_to_none(arr):
+    """Convert a numpy array to a list, replacing NaN with None for JSON safety."""
+    return [None if np.isnan(v) else v for v in arr.ravel()]
+
+
+def _nan_to_none_2d(arr):
+    """Convert a 2D numpy array to nested lists, replacing NaN with None."""
+    return [[None if np.isnan(v) else v for v in row] for row in arr]
+
+
 def _sine_model(t, *params):
     """Multi-sine function: offset + sum(A_i * sin(2*pi*t/P_i + phi_i)).
 
@@ -144,10 +154,10 @@ def fit_sinusoidal_all_wavelengths(wavelength_arr, time_arr, flux_2d, error_2d=N
         return {
             "success": True,
             "wavelengths": wl.tolist(),
-            "amplitudes": amplitudes.tolist(),
-            "periods": periods.tolist(),
-            "phases": phases.tolist(),
-            "chi_squared": chi_sq.tolist(),
+            "amplitudes": _nan_to_none_2d(amplitudes),
+            "periods": _nan_to_none_2d(periods),
+            "phases": _nan_to_none_2d(phases),
+            "chi_squared": _nan_to_none(chi_sq),
             "success_mask": success_mask.tolist(),
             "n_sines": n_sines,
         }
@@ -172,10 +182,17 @@ def fit_spectrum_to_grid(obs_wl, obs_flux, obs_error, grid_wl, grid_spectra, gri
         f_obs = f_obs[mask]
         e_obs = e_obs[mask]
 
+        wl_grid = np.asarray(grid_wl, dtype=float)
+
+        # Restrict to wavelengths covered by the model grid (avoid silent extrapolation)
+        grid_coverage = (wl_obs >= wl_grid[0]) & (wl_obs <= wl_grid[-1])
+        wl_obs = wl_obs[grid_coverage]
+        f_obs = f_obs[grid_coverage]
+        e_obs = e_obs[grid_coverage]
+
         if len(wl_obs) < 5:
             return {"success": False, "error": "Not enough valid data points"}
 
-        wl_grid = np.asarray(grid_wl, dtype=float)
         spectra = np.asarray(grid_spectra, dtype=float)  # (N_models, W_grid)
         n_models = spectra.shape[0]
 
@@ -190,7 +207,7 @@ def fit_spectrum_to_grid(obs_wl, obs_flux, obs_error, grid_wl, grid_spectra, gri
         num = models_interp @ (f_obs * inv_var)            # (n_models,)
         den = models_interp**2 @ inv_var                   # (n_models,)
 
-        valid = den > 0
+        valid = (den > 0) & (num > 0)
         scales = np.where(valid, num / den, 0.0)           # (n_models,)
 
         # Compute chi-squared for all models at once
@@ -203,12 +220,11 @@ def fit_spectrum_to_grid(obs_wl, obs_flux, obs_error, grid_wl, grid_spectra, gri
         best_chi = float(all_chi[best_idx])
         best_scale = float(scales[best_idx])
 
-        if best_idx < 0 or not np.isfinite(best_chi):
+        if not np.isfinite(best_chi):
             return {"success": False, "error": "No valid model fits found"}
 
         # Get best fit spectrum on observed grid
-        best_model = np.interp(wl_obs, wl_grid, spectra[best_idx])
-        best_fit = best_scale * best_model
+        best_fit = best_scale * models_interp[best_idx]
         residuals = f_obs - best_fit
 
         # Top 5 by chi-squared
@@ -224,7 +240,7 @@ def fit_spectrum_to_grid(obs_wl, obs_flux, obs_error, grid_wl, grid_spectra, gri
         best_params = grid_params[best_idx] if best_idx < len(grid_params) else {}
 
         reduced_chi_sq = float(best_chi / max(1, len(wl_obs) - 1))
-        median_snr = float(np.median(f_obs / e_obs))
+        median_snr = float(np.median(np.abs(f_obs) / e_obs))
 
         return {
             "success": True,
@@ -334,8 +350,8 @@ def fit_spectrum_all_timesteps(wavelength_arr, time_arr, flux_2d, error_2d,
             "success": True,
             "times": t.tolist(),
             "best_params": best_params,
-            "chi_squared": chi_squared.tolist(),
-            "scaling_factors": scaling_factors.tolist(),
+            "chi_squared": _nan_to_none(chi_squared),
+            "scaling_factors": _nan_to_none(scaling_factors),
             "success_mask": success_mask.tolist(),
         }
 
