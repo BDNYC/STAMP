@@ -244,7 +244,9 @@ async function uploadMastDirectory() {
     timeRangeMin:  timeRangeMin || null,
     timeRangeMax: timeRangeMax || null,
     wavelengthRangeMin: wavelengthRangeMin || null,
-    wavelengthRangeMax: wavelengthRangeMax || null
+    wavelengthRangeMax: wavelengthRangeMax || null,
+    variabilityRangeMin: variabilityRangeMin || null,
+    variabilityRangeMax: variabilityRangeMax || null
   };
 
   const uploadBtn = document.getElementById('uploadMastBtn');
@@ -304,6 +306,7 @@ async function uploadMastDirectory() {
     const data = await res.json();
     if (data.error) { throw new Error(data.error); }
 
+    window.__stampMetadata = data.metadata || null;
     if (data.metadata) displayMetadata(data.metadata);
     if (data.reference_spectrum) { try { window.__referenceSpectrum = JSON.parse(data.reference_spectrum); } catch(_) { window.__referenceSpectrum = null; } }
     if (data.raw_flux_2d) { try { window.__rawFluxData = JSON.parse(data.raw_flux_2d); } catch(_) { window.__rawFluxData = null; } }

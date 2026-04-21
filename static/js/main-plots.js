@@ -504,7 +504,7 @@ function addCustomBand(name = '', start = '', end = '') {
  * @param {HTMLElement} plotDiv
  */
 function setupPlotClickHandler(plotDiv) {
-  plotDiv.removeAllListeners('plotly_click');
+  plotDiv.removeAllListeners?.('plotly_click');
   plotDiv.on('plotly_click', function(eventData) {
     let isEnabled = false;
     if (plotDiv.id === 'surfacePlot') {

@@ -17,6 +17,9 @@ plotly==5.24.1
 numpy==2.2.1
 scipy==1.14.1
 
+# Transit modelling
+batman-package
+
 # FITS / Astronomy
 astropy==7.1.0
 pyerfa==2.0.1.5

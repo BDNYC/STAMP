@@ -31,7 +31,6 @@ last_custom_bands = []
 latest_spectrum_mp4_path = None
 
 # Per-token video temp paths
-video_tmp_paths = {}
 
 
 def _progress_set(job_id, *, percent=None, message=None, status=None,

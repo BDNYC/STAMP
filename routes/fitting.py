@@ -12,17 +12,36 @@ from flask import Blueprint, request, jsonify
 from config import GRIDS_DIR
 from state import _progress_set, RESULTS, PROG_LOCK
 from fitting import (
+    lomb_scargle,
     fit_sinusoidal,
     fit_sinusoidal_all_wavelengths,
     fit_spectrum_to_grid,
     fit_spectrum_chunked,
     fit_spectrum_all_timesteps,
+    fit_transit,
+    fit_transit_all_wavelengths,
 )
 from model_grids import load_grid_from_directory, list_available_grids
 
 logger = logging.getLogger(__name__)
 
 fitting_bp = Blueprint('fitting', __name__)
+
+
+@fitting_bp.route('/fit/lombscargle', methods=['POST'])
+def lombscargle():
+    """Compute Lomb-Scargle periodogram (synchronous)."""
+    try:
+        data = request.get_json(force=True)
+        result = lomb_scargle(
+            data['time'], data['flux'], data.get('error'),
+            min_period=data.get('min_period'),
+            max_period=data.get('max_period'),
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Lomb-Scargle error: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 400
 
 
 @fitting_bp.route('/fit/sinusoidal', methods=['POST'])
@@ -199,6 +218,93 @@ def fit_grid_sweep():
 
     except Exception as e:
         logger.error(f"Grid sweep start error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 400
+
+
+@fitting_bp.route('/fit/transit', methods=['POST'])
+def fit_transit_route():
+    """Fit a transit model to a single 1D light curve (synchronous)."""
+    try:
+        data = request.get_json(force=True)
+        time_arr = data['time']
+        flux_arr = data['flux']
+        error_arr = data.get('error')
+        period = float(data['period'])
+        rp_rs_guess = float(data.get('rp_rs_guess', 0.1))
+        a_rs = float(data.get('a_rs', 15.0))
+        inc = float(data.get('inc', 90.0))
+        ecc = float(data.get('ecc', 0.0))
+        omega = float(data.get('omega', 90.0))
+        limb_dark = data.get('limb_dark', 'quadratic')
+        u = data.get('u', [0.1, 0.1])
+        fit_limb_dark = bool(data.get('fit_limb_dark', False))
+
+        result = fit_transit(
+            time_arr, flux_arr, error_arr,
+            period=period, rp_rs_guess=rp_rs_guess, a_rs=a_rs, inc=inc,
+            ecc=ecc, omega=omega, limb_dark=limb_dark, u=u,
+            fit_limb_dark=fit_limb_dark,
+        )
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Transit fit error: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@fitting_bp.route('/fit/transit_all_wavelengths', methods=['POST'])
+def fit_transit_sweep():
+    """Fit transit model across all wavelengths (async, returns job_id)."""
+    try:
+        data = request.get_json(force=True)
+        wavelength_arr = data['wavelengths']
+        time_arr = data['time']
+        flux_2d = data['flux_2d']
+        error_2d = data.get('error_2d')
+        period = float(data['period'])
+        rp_rs_guess = float(data.get('rp_rs_guess', 0.1))
+        a_rs = float(data.get('a_rs', 15.0))
+        inc = float(data.get('inc', 90.0))
+        ecc = float(data.get('ecc', 0.0))
+        omega = float(data.get('omega', 90.0))
+        limb_dark = data.get('limb_dark', 'quadratic')
+        u = data.get('u', [0.1, 0.1])
+        fit_limb_dark = bool(data.get('fit_limb_dark', False))
+
+        job_id = uuid.uuid4().hex
+        _progress_set(job_id, reset=True, percent=1.0,
+                       message="Starting transmission spectrum...", stage="fitting")
+
+        def _worker():
+            try:
+                def cb(pct):
+                    _progress_set(job_id, percent=min(95.0, pct),
+                                   message=f"Fitting wavelengths... {pct:.0f}%")
+
+                result = fit_transit_all_wavelengths(
+                    wavelength_arr, time_arr, flux_2d, error_2d,
+                    period=period, rp_rs_guess=rp_rs_guess, a_rs=a_rs, inc=inc,
+                    ecc=ecc, omega=omega, limb_dark=limb_dark, u=u,
+                    fit_limb_dark=fit_limb_dark,
+                    progress_cb=cb,
+                )
+
+                with PROG_LOCK:
+                    RESULTS[job_id] = result
+
+                _progress_set(job_id, percent=100.0, message="Done",
+                               status="done", stage="done")
+
+            except Exception as exc:
+                logger.exception(f"Transit sweep job {job_id[:8]} failed")
+                _progress_set(job_id, message=str(exc), status="error", stage="error")
+
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+        return jsonify({"job_id": job_id}), 202
+
+    except Exception as e:
+        logger.error(f"Transit sweep start error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 400
 
 

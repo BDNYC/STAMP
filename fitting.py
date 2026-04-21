@@ -5,6 +5,8 @@ No Flask, no Plotly — just numpy/scipy functions that take arrays and return d
 
 import numpy as np
 from scipy.optimize import curve_fit
+from astropy.timeseries import LombScargle
+import batman
 
 
 def _nan_to_none(arr):
@@ -31,6 +33,82 @@ def _sine_model(t, *params):
         phase = params[3 + 3 * i]
         result += amp * np.sin(2.0 * np.pi * t / period + phase)
     return result
+
+
+def lomb_scargle(time_arr, flux_arr, error_arr=None, min_period=None, max_period=None):
+    """Compute a Lomb-Scargle periodogram to detect periodic signals.
+
+    Parameters
+    ----------
+    time_arr, flux_arr : array-like
+        Time (hours) and flux arrays.
+    error_arr : array-like, optional
+        Flux uncertainties.
+    min_period, max_period : float, optional
+        Period search bounds (hours). Defaults: 2× median cadence to baseline.
+
+    Returns dict with: success, best_period, best_power, periods, powers.
+    """
+    try:
+        t = np.asarray(time_arr, dtype=float)
+        f = np.asarray(flux_arr, dtype=float)
+
+        mask = np.isfinite(t) & np.isfinite(f)
+        if error_arr is not None:
+            e = np.asarray(error_arr, dtype=float)
+            mask &= np.isfinite(e) & (e > 0)
+            e = e[mask]
+        else:
+            e = None
+        t = t[mask]
+        f = f[mask]
+
+        if len(t) < 6:
+            return {"success": False, "error": "Not enough valid data points for periodogram"}
+
+        baseline = float(t.max() - t.min())
+        if baseline <= 0:
+            return {"success": False, "error": "Time baseline is zero"}
+
+        cadence = float(np.median(np.diff(np.sort(t))))
+        if min_period is None:
+            min_period = max(2.0 * cadence, baseline / 500.0)
+        if max_period is None:
+            max_period = baseline
+
+        min_freq = 1.0 / max_period
+        max_freq = 1.0 / min_period
+
+        ls = LombScargle(t, f, dy=e)
+        frequency, power = ls.autopower(minimum_frequency=min_freq,
+                                        maximum_frequency=max_freq)
+
+        if len(power) == 0:
+            return {"success": False, "error": "No frequencies in search range"}
+
+        best_idx = int(np.argmax(power))
+        best_freq = float(frequency[best_idx])
+        best_period = 1.0 / best_freq if best_freq > 0 else 0.0
+        best_power = float(power[best_idx])
+
+        # Downsample for JSON if too many points
+        periods = (1.0 / frequency).tolist()
+        powers = power.tolist()
+        if len(periods) > 2000:
+            step = len(periods) // 2000
+            periods = periods[::step]
+            powers = powers[::step]
+
+        return {
+            "success": True,
+            "best_period": best_period,
+            "best_power": best_power,
+            "periods": periods,
+            "powers": powers,
+        }
+
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
 
 
 def fit_sinusoidal(time_arr, flux_arr, error_arr=None, n_sines=1, period_guess=None):
@@ -352,6 +430,245 @@ def fit_spectrum_all_timesteps(wavelength_arr, time_arr, flux_2d, error_2d,
             "best_params": best_params,
             "chi_squared": _nan_to_none(chi_squared),
             "scaling_factors": _nan_to_none(scaling_factors),
+            "success_mask": success_mask.tolist(),
+        }
+
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def _transit_model(time_days, rp_rs, t0, period, a_rs, inc, ecc, omega, limb_dark, u):
+    """Evaluate a Mandel & Agol (2002) transit model via batman.
+
+    All times must be in days.  Returns flux normalised to ~1.0.
+    """
+    params = batman.TransitParams()
+    params.rp = rp_rs
+    params.t0 = t0
+    params.per = period
+    params.a = a_rs
+    params.inc = inc
+    params.ecc = ecc
+    params.w = omega
+    params.limb_dark = limb_dark
+    params.u = list(u)
+    m = batman.TransitModel(params, time_days)
+    return m.light_curve(params)
+
+
+def fit_transit(time_arr, flux_arr, error_arr, period, rp_rs_guess=0.1,
+                a_rs=15.0, inc=90.0, ecc=0.0, omega=90.0,
+                limb_dark='quadratic', u=(0.1, 0.1), fit_limb_dark=False,
+                time_unit='hours'):
+    """Fit a transit model to a normalised 1D light curve.
+
+    Follows the same pattern as ``fit_sinusoidal``: try/except wrapper,
+    returns ``{success, ...}`` dict.
+
+    Parameters
+    ----------
+    time_arr, flux_arr, error_arr : array-like
+        Time, flux (~1.0 normalised) and error arrays.
+    period : float
+        Orbital period in the same unit as *time_arr*.
+    rp_rs_guess : float
+        Initial guess for Rp/Rs.
+    a_rs : float
+        Semi-major axis in stellar radii.
+    inc : float
+        Orbital inclination (degrees).
+    ecc, omega : float
+        Eccentricity and argument of periastron (degrees).
+    limb_dark : str
+        Limb-darkening law (``'quadratic'``, ``'linear'``, etc.).
+    u : tuple of float
+        Limb-darkening coefficients.
+    fit_limb_dark : bool
+        If True, also fit u1 and u2 alongside Rp/Rs and t0.
+    time_unit : str
+        ``'hours'`` (default) or ``'days'``.
+    """
+    try:
+        t = np.asarray(time_arr, dtype=float)
+        f = np.asarray(flux_arr, dtype=float)
+        e = np.asarray(error_arr, dtype=float) if error_arr is not None else None
+
+        # Convert to days for batman
+        if time_unit == 'hours':
+            t_days = t / 24.0
+            period_days = period / 24.0
+        else:
+            t_days = t.copy()
+            period_days = period
+
+        mask = np.isfinite(t_days) & np.isfinite(f)
+        if e is not None:
+            mask &= np.isfinite(e) & (e > 0)
+            e_fit = e[mask]
+        else:
+            e_fit = None
+        t_fit = t_days[mask]
+        f_fit = f[mask]
+
+        min_params = 4 if fit_limb_dark else 2
+        if len(t_fit) < (min_params + 1):
+            return {"success": False, "error": "Not enough valid data points"}
+
+        # Initial guess for t0: time of deepest flux dip
+        t0_guess = float(t_fit[np.argmin(f_fit)])
+
+        u_list = list(u)
+
+        if fit_limb_dark:
+            # Fit 4 params: rp_rs, t0, u1, u2
+            def model_func(t_d, rp, t0_p, u1, u2):
+                return _transit_model(t_d, rp, t0_p, period_days, a_rs, inc,
+                                      ecc, omega, limb_dark, [u1, u2])
+
+            p0 = [rp_rs_guess, t0_guess, u_list[0], u_list[1] if len(u_list) > 1 else 0.1]
+            lower = [0.0, t_fit.min() - 0.5 * period_days, 0.0, 0.0]
+            upper = [0.5, t_fit.max() + 0.5 * period_days, 1.0, 1.0]
+        else:
+            # Fit 2 params: rp_rs, t0
+            def model_func(t_d, rp, t0_p):
+                return _transit_model(t_d, rp, t0_p, period_days, a_rs, inc,
+                                      ecc, omega, limb_dark, u_list)
+
+            p0 = [rp_rs_guess, t0_guess]
+            lower = [0.0, t_fit.min() - 0.5 * period_days]
+            upper = [0.5, t_fit.max() + 0.5 * period_days]
+
+        popt, pcov = curve_fit(
+            model_func, t_fit, f_fit, p0=p0,
+            sigma=e_fit, absolute_sigma=(e_fit is not None),
+            bounds=(lower, upper),
+            maxfev=10000,
+        )
+
+        perr = np.sqrt(np.diag(pcov))
+
+        rp_rs_fit = float(popt[0])
+        rp_rs_err = float(perr[0])
+        t0_fit_days = float(popt[1])
+
+        if fit_limb_dark:
+            u_fit = [float(popt[2]), float(popt[3])]
+            u_err = [float(perr[2]), float(perr[3])]
+        else:
+            u_fit = u_list
+            u_err = [0.0] * len(u_list)
+
+        # Evaluate model on full (unmasked) time grid
+        fit_values = _transit_model(t_days, rp_rs_fit, t0_fit_days, period_days,
+                                    a_rs, inc, ecc, omega, limb_dark, u_fit)
+
+        # Residuals on masked data
+        fit_masked = model_func(t_fit, *popt)
+        residuals = f_fit - fit_masked
+
+        if e_fit is not None:
+            chi_sq = float(np.sum((residuals / e_fit) ** 2))
+        else:
+            chi_sq = float(np.sum(residuals ** 2))
+
+        dof = max(1, len(t_fit) - len(popt))
+        reduced_chi_sq = chi_sq / dof
+
+        # Transit depth and uncertainty
+        depth = rp_rs_fit ** 2
+        depth_err = 2.0 * rp_rs_fit * rp_rs_err
+
+        # Convert t0 back to original time unit
+        if time_unit == 'hours':
+            t0_display = t0_fit_days * 24.0
+        else:
+            t0_display = t0_fit_days
+
+        return {
+            "success": True,
+            "fit_values": fit_values.tolist(),
+            "fit_time": t.tolist(),
+            "params": {
+                "rp_rs": rp_rs_fit,
+                "rp_rs_err": rp_rs_err,
+                "t0": t0_display,
+                "depth": depth,
+                "depth_err": depth_err,
+                "depth_ppm": depth * 1e6,
+                "depth_ppm_err": depth_err * 1e6,
+                "period": period,
+                "a_rs": a_rs,
+                "inc": inc,
+                "ecc": ecc,
+                "omega": omega,
+                "limb_dark": limb_dark,
+                "u": u_fit,
+                "u_err": u_err,
+            },
+            "residuals": residuals.tolist(),
+            "residual_time": (t_fit * 24.0).tolist() if time_unit == 'hours' else t_fit.tolist(),
+            "chi_squared": chi_sq,
+            "reduced_chi_squared": reduced_chi_sq,
+        }
+
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def fit_transit_all_wavelengths(wavelength_arr, time_arr, flux_2d, error_2d,
+                                period, rp_rs_guess=0.1, a_rs=15.0, inc=90.0,
+                                ecc=0.0, omega=90.0, limb_dark='quadratic',
+                                u=(0.1, 0.1), fit_limb_dark=False,
+                                time_unit='hours', progress_cb=None):
+    """Fit transit model to each wavelength slice, sweeping Rp/Rs vs wavelength.
+
+    flux_2d shape: (n_wavelengths, n_times)
+    Returns dict with wavelengths, rp_rs, transit_depth (ppm), etc.
+    """
+    try:
+        wl = np.asarray(wavelength_arr, dtype=float)
+        t = np.asarray(time_arr, dtype=float)
+        flux = np.asarray(flux_2d, dtype=float)
+        err = np.asarray(error_2d, dtype=float) if error_2d is not None else None
+
+        n_wl = len(wl)
+        rp_rs_arr = np.full(n_wl, np.nan)
+        rp_rs_err_arr = np.full(n_wl, np.nan)
+        depth_arr = np.full(n_wl, np.nan)
+        depth_err_arr = np.full(n_wl, np.nan)
+        t0_arr = np.full(n_wl, np.nan)
+        chi_sq = np.full(n_wl, np.nan)
+        success_mask = np.zeros(n_wl, dtype=bool)
+
+        for i in range(n_wl):
+            e_row = err[i] if err is not None else None
+            result = fit_transit(
+                t, flux[i], e_row,
+                period=period, rp_rs_guess=rp_rs_guess, a_rs=a_rs, inc=inc,
+                ecc=ecc, omega=omega, limb_dark=limb_dark, u=u,
+                fit_limb_dark=fit_limb_dark, time_unit=time_unit,
+            )
+            if result["success"]:
+                success_mask[i] = True
+                p = result["params"]
+                rp_rs_arr[i] = p["rp_rs"]
+                rp_rs_err_arr[i] = p["rp_rs_err"]
+                depth_arr[i] = p["depth_ppm"]
+                depth_err_arr[i] = p["depth_ppm_err"]
+                t0_arr[i] = p["t0"]
+                chi_sq[i] = result["chi_squared"]
+            if progress_cb and i % max(1, n_wl // 20) == 0:
+                progress_cb(float(i) / n_wl * 100.0)
+
+        return {
+            "success": True,
+            "wavelengths": wl.tolist(),
+            "rp_rs": _nan_to_none(rp_rs_arr),
+            "rp_rs_err": _nan_to_none(rp_rs_err_arr),
+            "transit_depth": _nan_to_none(depth_arr),
+            "transit_depth_err": _nan_to_none(depth_err_arr),
+            "t0": _nan_to_none(t0_arr),
+            "chi_squared": _nan_to_none(chi_sq),
             "success_mask": success_mask.tolist(),
         }
 

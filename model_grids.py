@@ -126,7 +126,8 @@ def load_grid_from_directory(grid_dir, grid_type=None):
             else:
                 # Interpolate onto reference grid if wavelengths differ
                 if len(wl) != len(ref_wavelengths) or not np.allclose(wl, ref_wavelengths, atol=1e-6):
-                    flux = np.interp(ref_wavelengths, wl, flux)
+                    sort_idx = np.argsort(wl)
+                    flux = np.interp(ref_wavelengths, wl[sort_idx], flux[sort_idx])
 
             spectra_list.append(flux)
 

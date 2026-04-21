@@ -19,7 +19,7 @@ import h5py
 import state
 from state import _progress_set, PROGRESS, RESULTS, PROG_LOCK, cache
 from config import BASE_DIR, DEMO_DATA_DIR
-from data_io import apply_data_ranges, _first_key
+from data_io import apply_data_ranges, _first_key, load_lightcurve_txt_folder
 from processing import process_mast_files_with_gaps
 from plotting import create_surface_plot_with_visits, create_heatmap_plot
 
@@ -29,32 +29,52 @@ jobs_bp = Blueprint('jobs', __name__)
 
 
 def _extract_and_sort(zip_path, work_dir):
-    """Extract a ZIP archive and return FITS/H5 paths sorted by observation time."""
+    """Extract a ZIP archive and return (paths, format_type).
+
+    format_type is "fits_h5" or "lightcurve_txt".
+    For fits_h5, paths is a list of file paths sorted by observation time.
+    For lightcurve_txt, paths is the folder path containing .txt files.
+    """
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall(work_dir)
 
     fits_files = []
-    for root, _, files in os.walk(work_dir):
+    txt_files = []
+    for root, dirs, files in os.walk(work_dir):
+        dirs[:] = [d for d in dirs if d != '__MACOSX']
         for f in files:
+            if f.startswith('._') or f.startswith('.'):
+                continue
             if f.lower().endswith(('.fits', '.h5')):
                 fits_files.append(os.path.join(root, f))
+            elif f.lower().endswith('.txt'):
+                txt_files.append(os.path.join(root, f))
 
-    file_times = []
-    for fp in fits_files:
-        try:
-            if fp.endswith('.fits'):
-                with fits.open(fp) as hdul:
-                    t = hdul['INT_TIMES'].data['int_mid_MJD_UTC'][0]
-            elif fp.endswith('.h5'):
-                with h5py.File(fp, 'r') as h:
-                    t = float(h['time'][0]) if 'time' in h else None
-            else:
-                t = None
-            if t is not None:
-                file_times.append((fp, t))
-        except Exception:
-            continue
-    return [fp for fp, _ in sorted(file_times, key=lambda x: x[1])]
+    # Prefer FITS/H5 if present
+    if fits_files:
+        file_times = []
+        for fp in fits_files:
+            try:
+                if fp.endswith('.fits'):
+                    with fits.open(fp) as hdul:
+                        t = hdul['INT_TIMES'].data['int_mid_MJD_UTC'][0]
+                elif fp.endswith('.h5'):
+                    with h5py.File(fp, 'r') as h:
+                        t = float(h['time'][0]) if 'time' in h else None
+                else:
+                    t = None
+                if t is not None:
+                    file_times.append((fp, t))
+            except Exception:
+                continue
+        return [fp for fp, _ in sorted(file_times, key=lambda x: x[1])], "fits_h5"
+
+    if txt_files:
+        # Find the common parent folder of the txt files
+        txt_dir = os.path.dirname(txt_files[0])
+        return txt_dir, "lightcurve_txt"
+
+    return [], None
 
 
 def _run_mast_job(job_id, zip_path, form_args):
@@ -107,24 +127,31 @@ def _run_mast_job(job_id, zip_path, form_args):
             work_dir = os.path.join(temp_dir, "unzipped")
             os.makedirs(work_dir, exist_ok=True)
             _progress_set(job_id, percent=3.0, message="Extracting archive…", stage="scan")
-            fits_files_sorted = _extract_and_sort(zip_path, work_dir)
+            extracted, format_type = _extract_and_sort(zip_path, work_dir)
 
-            if not fits_files_sorted:
-                raise ValueError("No valid FITS/H5 files found in archive.")
-
-            logger.info(f"   Found {len(fits_files_sorted)} FITS/H5 files")
+            if not extracted:
+                raise ValueError(
+                    "No valid data files (.fits, .h5, or .txt) found in archive."
+                )
 
             # Stage 3: Process
             def cb(pct, msg=None, **kw):
                 _progress_set(job_id, percent=pct, message=msg, **kw)
 
-            wavelength_1d, flux_norm_2d, flux_raw_2d, time_1d, metadata, error_raw_2d = (
-                process_mast_files_with_gaps(
-                    fits_files_sorted,
-                    use_interpolation,
-                    progress_cb=cb,
+            if format_type == "lightcurve_txt":
+                logger.info(f"   Detected light curve txt folder: {extracted}")
+                wavelength_1d, flux_norm_2d, flux_raw_2d, time_1d, metadata, error_raw_2d = (
+                    load_lightcurve_txt_folder(extracted, progress_cb=cb)
                 )
-            )
+            else:
+                logger.info(f"   Found {len(extracted)} FITS/H5 files")
+                wavelength_1d, flux_norm_2d, flux_raw_2d, time_1d, metadata, error_raw_2d = (
+                    process_mast_files_with_gaps(
+                        extracted,
+                        use_interpolation,
+                        progress_cb=cb,
+                    )
+                )
 
             logger.info(f"   Processed total_integrations: {metadata.get('total_integrations', 'unknown')}")
             logger.info(f"   Processed plotted_integrations: {metadata.get('plotted_integrations', 'unknown')}")
@@ -162,8 +189,7 @@ def _run_mast_job(job_id, zip_path, form_args):
             )
             logger.info(f"Sampling from {len(time_1d)} to {num_integrations} integrations")
 
-            step = len(time_1d) / num_integrations
-            indices = [int(i * step) for i in range(num_integrations)]
+            indices = np.linspace(0, len(time_1d) - 1, num_integrations, dtype=int).tolist()
 
             flux_norm_2d = flux_norm_2d[:, indices]
             flux_raw_2d = flux_raw_2d[:, indices]
@@ -262,7 +288,7 @@ def _run_mast_job(job_id, zip_path, form_args):
             z_range=variability_range,
             z_axis_display=z_axis_display,
             flux_unit=metadata.get('flux_unit', 'Unknown'),
-            errors_2d=error_raw_2d_filtered,
+            errors_2d=errors_for_plot,
         )
 
         # Store plot data in shared state for /download_plots
@@ -350,14 +376,20 @@ def start_mast():
         if time_range_min or time_range_max:
             t_min = float(time_range_min) if time_range_min else None
             t_max = float(time_range_max) if time_range_max else None
+            if t_min is not None and t_max is not None and t_min > t_max:
+                t_min, t_max = t_max, t_min
             time_range = (t_min, t_max)
         if wavelength_range_min or wavelength_range_max:
             wl_min = float(wavelength_range_min) if wavelength_range_min else None
             wl_max = float(wavelength_range_max) if wavelength_range_max else None
+            if wl_min is not None and wl_max is not None and wl_min > wl_max:
+                wl_min, wl_max = wl_max, wl_min
             wavelength_range = (wl_min, wl_max)
         if variability_range_min or variability_range_max:
             v_min = float(variability_range_min) if variability_range_min else None
             v_max = float(variability_range_max) if variability_range_max else None
+            if v_min is not None and v_max is not None and v_min > v_max:
+                v_min, v_max = v_max, v_min
             variability_range = (v_min, v_max)
 
         # Spawn background thread

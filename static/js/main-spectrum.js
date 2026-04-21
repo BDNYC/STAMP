@@ -408,7 +408,19 @@ function updateSpectrumPlot() {
       gridcolor: 'rgba(74,144,217,0.12)',
       linecolor: 'rgba(74,144,217,0.12)',
       zeroline: false,
-      range: currentSpectrumData.lockedRibbonRange ?  currentSpectrumData.lockedRibbonRange : [currentSpectrumData.globalMin, currentSpectrumData.globalMax],
+      range: (() => {
+        let yr = currentSpectrumData.lockedRibbonRange
+          ? currentSpectrumData.lockedRibbonRange
+          : [currentSpectrumData.globalMin, currentSpectrumData.globalMax];
+        const ur = window.__userRanges || {};
+        if (currentSpectrumData.zAxisDisplay === 'variability' && (ur.variabilityRangeMin != null || ur.variabilityRangeMax != null)) {
+          yr = [
+            ur.variabilityRangeMin != null ? parseFloat(ur.variabilityRangeMin) : yr[0],
+            ur.variabilityRangeMax != null ? parseFloat(ur.variabilityRangeMax) : yr[1]
+          ];
+        }
+        return yr;
+      })(),
       tickformat: yTickFormat
     },
     margin: { l: 60, r: 40, t: 40, b: 60 },
@@ -800,7 +812,7 @@ function updateSpectrumPlot() {
 
   // Re-apply fit overlays after Plotly.newPlot completes
   setTimeout(() => {
-    if ((showSineFitOverlay && lastSineFitResult) || (showGridFitOverlay && (lastGridFitResult || lastChunkedFitResult))) {
+    if ((showSineFitOverlay && lastSineFitResult) || (showGridFitOverlay && (lastGridFitResult || lastChunkedFitResult)) || (showTransitFitOverlay && lastTransitFitResult)) {
       if (typeof applyFitOverlays === 'function') {
         applyFitOverlays();
       }

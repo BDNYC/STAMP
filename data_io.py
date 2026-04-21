@@ -1,8 +1,9 @@
 """
-File I/O for JWST spectral data (FITS and HDF5 formats).
+File I/O for JWST spectral data (FITS, HDF5, and TXT light curve formats).
 """
 
 import os
+import re
 import logging
 
 import numpy as np
@@ -84,6 +85,125 @@ def apply_data_ranges(wavelength, flux, time, wavelength_range=None,
     return filtered_wavelength, filtered_flux, filtered_time, range_info
 
 
+def load_lightcurve_txt_folder(folder_path, progress_cb=None):
+    """Load pre-binned light curve data from a folder of .txt files.
+
+    Each .txt file represents one wavelength bin with filename pattern
+    ``<prefix>_<wl_lo>_<wl_hi>.txt``. Each file has 3 whitespace-separated
+    columns (no header): time (hours), normalized flux, flux error.
+
+    Returns the same 6-tuple as process_mast_files_with_gaps:
+        (wavelength_1d, flux_norm_2d, flux_raw_2d, time_1d, metadata, error_raw_2d)
+    where 2D arrays have shape [n_wavelength, n_time].
+    """
+    # Find and parse .txt files
+    pattern = re.compile(r'(\d+\.?\d*)_(\d+\.?\d*)\.txt$')
+    bins = []
+    for root, dirs, files in os.walk(folder_path):
+        # Skip macOS resource fork directories
+        dirs[:] = [d for d in dirs if d != '__MACOSX']
+        for fname in files:
+            if not fname.lower().endswith('.txt'):
+                continue
+            # Skip macOS resource fork files and hidden files
+            if fname.startswith('._') or fname.startswith('.'):
+                continue
+            m = pattern.search(fname)
+            if not m:
+                logger.warning(f"Skipping txt file with unrecognized name: {fname}")
+                continue
+            wl_lo, wl_hi = float(m.group(1)), float(m.group(2))
+            bins.append((wl_lo, wl_hi, os.path.join(root, fname)))
+
+    if not bins:
+        raise ValueError("No .txt files with wavelength bin edges found in folder.")
+
+    bins.sort(key=lambda x: x[0])
+    n_files = len(bins)
+    logger.info(f"Found {n_files} txt light curve files in {folder_path}")
+
+    # Read each file
+    wavelengths = []
+    flux_list = []
+    error_list = []
+    ref_time = None
+
+    for i, (wl_lo, wl_hi, fpath) in enumerate(bins):
+        data = np.loadtxt(fpath)
+        if data.ndim != 2 or data.shape[1] != 3:
+            raise ValueError(
+                f"{os.path.basename(fpath)}: expected 3 columns, "
+                f"got shape {data.shape}"
+            )
+
+        time_col = data[:, 0]
+        flux_col = data[:, 1]
+        error_col = data[:, 2]
+
+        if ref_time is None:
+            ref_time = time_col
+        elif not np.allclose(time_col, ref_time, atol=1e-6):
+            logger.warning(
+                f"{os.path.basename(fpath)}: time array differs from first file, "
+                f"using first file's time array"
+            )
+
+        wavelengths.append((wl_lo + wl_hi) / 2.0)
+        flux_list.append(flux_col)
+        error_list.append(error_col)
+
+        if progress_cb:
+            pct = 10.0 + (i + 1) / n_files * 50.0
+            progress_cb(pct, f"Reading {i + 1}/{n_files} txt files…", stage="read")
+
+    # Assemble arrays
+    wavelength_1d = np.array(wavelengths)
+    time_1d = ref_time
+    flux_norm_2d = np.vstack(flux_list)       # [n_wavelength, n_time]
+    error_raw_2d = np.vstack(error_list)
+    flux_raw_2d = flux_norm_2d.copy()
+
+    # Validation
+    if not np.all(np.diff(time_1d) > 0):
+        logger.warning("Time array is not monotonically increasing — sorting")
+        sort_idx = np.argsort(time_1d)
+        time_1d = time_1d[sort_idx]
+        flux_norm_2d = flux_norm_2d[:, sort_idx]
+        flux_raw_2d = flux_raw_2d[:, sort_idx]
+        error_raw_2d = error_raw_2d[:, sort_idx]
+
+    median_flux = np.nanmedian(flux_norm_2d)
+    if not (0.9 <= median_flux <= 1.1):
+        logger.warning(f"Median flux is {median_flux:.4f} — expected near 1.0")
+
+    if np.any(error_raw_2d < 0):
+        logger.warning("Some flux error values are negative")
+
+    metadata = {
+        'total_integrations': len(time_1d),
+        'plotted_integrations': len(time_1d),
+        'files_processed': n_files,
+        'wavelength_range': f"{wavelength_1d.min():.3f}-{wavelength_1d.max():.3f} um",
+        'time_range': f"{time_1d.min():.2f}-{time_1d.max():.2f} hours",
+        'targets': ['Unknown'],
+        'instruments': ['Unknown'],
+        'filters': ['Unknown'],
+        'gratings': ['Unknown'],
+        'flux_unit': 'Normalized',
+        'data_format': 'lightcurve_txt',
+    }
+
+    if progress_cb:
+        progress_cb(65.0, "Light curve data assembled", stage="regrid")
+
+    logger.info(
+        f"Loaded {n_files} wavelength bins x {len(time_1d)} time steps "
+        f"from txt files"
+    )
+
+    return wavelength_1d, flux_norm_2d, flux_raw_2d, time_1d, metadata, error_raw_2d
+
+
 def load_integrations_from_h5(file_path, per_integ_cb=None,
                               total_in_file=None):
     """Load spectral integrations from an HDF5 file.
@@ -105,8 +225,11 @@ def load_integrations_from_h5(file_path, per_integ_cb=None,
         err = None
         if err_k:
             err_data = f[err_k][:]
-            if err_k.endswith("stdvar"):
-                err = np.sqrt(err_data)
+            err_key_lower = err_k.lower()
+            is_variance = ('var' in err_key_lower and 'err' not in err_key_lower) or err_key_lower.endswith('stdvar')
+            err_units = str(f[err_k].attrs.get('units', '')) if hasattr(f[err_k], 'attrs') else ''
+            if is_variance or '^2' in err_units or 'squared' in err_units.lower():
+                err = np.sqrt(np.abs(err_data))
             else:
                 err = err_data
 

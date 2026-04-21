@@ -90,7 +90,6 @@ async function uploadFramesAndEncode(frames) {
   }
   const data = ct.includes('application/json') ? await res.json() : {};
   if (!data.success) throw new Error(`Video upload/encode failed: ${data.error || 'unknown error'}`);
-  window.__lastVideoToken = data.video_token || null;
 }
 
 /**
@@ -108,9 +107,8 @@ async function downloadAllWithVideo(e) {
     const frames = await captureSpectrumFrames();
     await uploadFramesAndEncode(frames);
 
-    // Download the ZIP (with video token if available)
-    const token = window.__lastVideoToken ? `?video_token=${encodeURIComponent(window.__lastVideoToken)}` : '';
-    const resp = await fetch('/download_plots' + token);
+    // Download the ZIP
+    const resp = await fetch('/download_plots');
     if (!resp.ok) {
       const et = await resp.text();
       throw new Error(`Download failed: ${et}`);

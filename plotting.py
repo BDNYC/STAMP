@@ -47,11 +47,11 @@ def create_surface_plot_with_visits(flux, wavelength, time, title, num_plots,
     # Z-range clipping
     if isinstance(z_range, (tuple, list)):
         if z_axis_display == 'variability':
-            z_min_range = -z_range[1] if z_range[0] is None else z_range[0]
-            z_max_range = z_range[1] if z_range[1] is not None else Z_adjusted.max()
+            z_min_range = np.nanmin(Z_adjusted) if z_range[0] is None else z_range[0]
+            z_max_range = z_range[1] if z_range[1] is not None else np.nanmax(Z_adjusted)
         else:
-            z_min_range = z_range[0] if z_range[0] is not None else Z_adjusted.min()
-            z_max_range = z_range[1] if z_range[1] is not None else Z_adjusted.max()
+            z_min_range = z_range[0] if z_range[0] is not None else np.nanmin(Z_adjusted)
+            z_max_range = z_range[1] if z_range[1] is not None else np.nanmax(Z_adjusted)
         Z_clipped = np.clip(Z_adjusted, z_min_range, z_max_range)
         z_min = z_min_range
         z_max = z_max_range
@@ -60,15 +60,15 @@ def create_surface_plot_with_visits(flux, wavelength, time, title, num_plots,
             z_min_range = -z_range
             z_max_range = z_range
         else:
-            z_min_range = Z_adjusted.min()
-            z_max_range = Z_adjusted.max()
+            z_min_range = np.nanmin(Z_adjusted)
+            z_max_range = np.nanmax(Z_adjusted)
         Z_clipped = np.clip(Z_adjusted, z_min_range, z_max_range)
         z_min = z_min_range
         z_max = z_max_range
     else:
         Z_clipped = Z_adjusted
-        z_min = Z_adjusted.min()
-        z_max = Z_adjusted.max()
+        z_min = np.nanmin(Z_adjusted)
+        z_max = np.nanmax(Z_adjusted)
 
     # One surface trace per visit
     if use_interpolation:
@@ -180,7 +180,7 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots,
 
     if isinstance(z_range, (tuple, list)):
         if z_axis_display == 'variability':
-            z_min_range = -z_range[1] if z_range[0] is None else z_range[0]
+            z_min_range = np.nanmin(Z_adjusted) if z_range[0] is None else z_range[0]
             z_max_range = z_range[1] if z_range[1] is not None else np.nanmax(Z_adjusted)
         else:
             z_min_range = z_range[0] if z_range[0] is not None else np.nanmin(Z_adjusted)

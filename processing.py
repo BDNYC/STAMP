@@ -90,7 +90,7 @@ def process_data(flux, wavelength, time, num_plots, apply_binning=True,
         logger.info(f'Calculated bin size: {bin_size}')
         if bin_size > 1 and apply_binning:
             flux = bin_flux_arr(flux, bin_size)
-            n_bins = flux.shape[1]
+            n_bins = min(flux.shape[1], len(time))
             bin_edges = np.linspace(0, len(time), n_bins + 1)
             bin_centers = ((bin_edges[:-1] + bin_edges[1:]) / 2).astype(int)
             bin_centers = np.clip(bin_centers, 0, len(time) - 1)

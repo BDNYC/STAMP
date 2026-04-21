@@ -214,6 +214,88 @@ function getChunkDefinitions() {
 // Sinusoidal Fitting
 
 /**
+ * Compute a Lomb-Scargle periodogram to detect the dominant period.
+ */
+async function requestLombScargle() {
+  if (spectrumMode !== 'vs_time') {
+    alert('Switch to vs_time mode to compute a periodogram.');
+    return;
+  }
+
+  const curve = _extractCurrentLightCurve();
+  if (!curve) { alert('No spectrum data loaded.'); return; }
+
+  const statusEl = document.getElementById('fittingJobStatus');
+  if (statusEl) statusEl.textContent = 'Computing periodogram...';
+
+  try {
+    const resp = await fetch('/fit/lombscargle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ time: curve.time, flux: curve.flux, error: curve.error }),
+    });
+    if (!resp.ok) throw new Error(await resp.text().catch(() => resp.statusText) || `Server error (${resp.status})`);
+    const result = await resp.json();
+
+    if (!result.success) {
+      alert('Periodogram failed: ' + (result.error || 'Unknown error'));
+      if (statusEl) statusEl.textContent = '';
+      return;
+    }
+
+    // Auto-fill period guess
+    const periodEl = document.getElementById('fitPeriodGuess');
+    if (periodEl) periodEl.value = result.best_period.toFixed(4);
+
+    // Show result text
+    const resultEl = document.getElementById('periodogramResult');
+    if (resultEl) {
+      resultEl.textContent = 'Detected period: ' + result.best_period.toFixed(4) + ' hr (power: ' + result.best_power.toFixed(4) + ')';
+      resultEl.classList.remove('hidden');
+    }
+
+    // Plot periodogram
+    const plotEl = document.getElementById('periodogramPlot');
+    if (plotEl && result.periods && result.powers) {
+      plotEl.classList.remove('hidden');
+      Plotly.newPlot(plotEl, [
+        {
+          x: result.periods,
+          y: result.powers,
+          type: 'scatter',
+          mode: 'lines',
+          line: { color: '#F59E0B', width: 1.5 },
+          name: 'Power',
+        },
+        {
+          x: [result.best_period, result.best_period],
+          y: [0, result.best_power],
+          type: 'scatter',
+          mode: 'lines',
+          line: { color: '#10b981', width: 2, dash: 'dash' },
+          name: 'Best: ' + result.best_period.toFixed(4) + ' hr',
+        },
+      ], {
+        template: 'plotly_dark',
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#e5e7eb' },
+        xaxis: { title: 'Period (hours)', type: 'log' },
+        yaxis: { title: 'Lomb-Scargle Power' },
+        margin: { t: 10, b: 40, l: 50, r: 10 },
+        showlegend: true,
+        legend: { x: 0.7, y: 0.95, font: { size: 10 } },
+      }, { responsive: true, displayModeBar: false });
+    }
+
+    if (statusEl) statusEl.textContent = '';
+  } catch (e) {
+    alert('Periodogram request failed: ' + e.message);
+    if (statusEl) statusEl.textContent = '';
+  }
+}
+
+/**
  * Request a sinusoidal fit for the current light curve and overlay the result.
  */
 async function requestSineFit() {
@@ -252,6 +334,7 @@ async function requestSineFit() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    if (!resp.ok) throw new Error(await resp.text().catch(() => resp.statusText) || `Server error (${resp.status})`);
     const result = await resp.json();
 
     if (!result.success) {
@@ -333,6 +416,7 @@ async function requestGridFit() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      if (!resp.ok) throw new Error(await resp.text().catch(() => resp.statusText) || `Server error (${resp.status})`);
       const result = await resp.json();
 
       if (!result.success) {
@@ -369,6 +453,7 @@ async function requestGridFit() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      if (!resp.ok) throw new Error(await resp.text().catch(() => resp.statusText) || `Server error (${resp.status})`);
       const result = await resp.json();
 
       if (!result.success) {
@@ -425,6 +510,7 @@ function _pollFitJob(jobId, statusEl, onDone) {
   const poll = setInterval(async () => {
     try {
       const resp = await fetch(`/progress/${jobId}`);
+      if (!resp.ok) throw new Error(await resp.text().catch(() => resp.statusText) || `Server error (${resp.status})`);
       const prog = await resp.json();
 
       if (statusEl) statusEl.textContent = prog.message || 'Working...';
@@ -432,6 +518,7 @@ function _pollFitJob(jobId, statusEl, onDone) {
       if (prog.status === 'done') {
         clearInterval(poll);
         const resResp = await fetch(`/results/${jobId}`);
+        if (!resResp.ok) throw new Error(await resResp.text().catch(() => resResp.statusText) || `Server error (${resResp.status})`);
         const result = await resResp.json();
         if (statusEl) statusEl.textContent = '';
         onDone(result);
@@ -479,6 +566,7 @@ async function requestSineSweep() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    if (!resp.ok) throw new Error(await resp.text().catch(() => resp.statusText) || `Server error (${resp.status})`);
     const data = await resp.json();
 
     if (!data.job_id) {
@@ -535,6 +623,7 @@ async function requestGridSweep() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    if (!resp.ok) throw new Error(await resp.text().catch(() => resp.statusText) || `Server error (${resp.status})`);
     const data = await resp.json();
 
     if (!data.job_id) {
@@ -557,6 +646,266 @@ async function requestGridSweep() {
     alert('Sweep request failed: ' + e.message);
     if (statusEl) statusEl.textContent = '';
   }
+}
+
+// Transit Fitting
+
+/**
+ * Read all transit UI inputs and validate.
+ * @returns {Object|null} Transit params or null if invalid.
+ */
+function _getTransitParams() {
+  const periodEl = document.getElementById('transitPeriod');
+  if (!periodEl || !periodEl.value) {
+    alert('Period is required for transit fitting.');
+    return null;
+  }
+
+  const period = parseFloat(periodEl.value);
+  if (!isFinite(period) || period <= 0) {
+    alert('Period must be a positive number.');
+    return null;
+  }
+
+  return {
+    period: period,
+    rp_rs_guess: parseFloat(document.getElementById('transitRpRs').value) || 0.1,
+    a_rs: parseFloat(document.getElementById('transitARs').value) || 15.0,
+    inc: parseFloat(document.getElementById('transitInc').value) || 90.0,
+    ecc: parseFloat(document.getElementById('transitEcc').value) || 0.0,
+    omega: parseFloat(document.getElementById('transitOmega').value) || 90.0,
+    limb_dark: document.getElementById('transitLimbDark').value || 'quadratic',
+    u: [
+      parseFloat(document.getElementById('transitU1').value) || 0.1,
+      parseFloat(document.getElementById('transitU2').value) || 0.1,
+    ],
+    fit_limb_dark: !!document.getElementById('transitFitLD').checked,
+  };
+}
+
+/**
+ * Request a transit fit for the current light curve and overlay the result.
+ */
+async function requestTransitFit() {
+  if (spectrumMode !== 'vs_time') {
+    alert('Switch to vs_time mode to fit a transit model.');
+    return;
+  }
+
+  const params = _getTransitParams();
+  if (!params) return;
+
+  const curve = _extractCurrentLightCurve();
+  if (!curve) { alert('No spectrum data loaded.'); return; }
+
+  // Normalize flux to ~1.0 (batman expects normalized flux)
+  const fluxArr = curve.flux.filter(v => isFinite(v));
+  if (fluxArr.length === 0) { alert('No valid flux data.'); return; }
+
+  // Sort a copy to find the median
+  const sorted = fluxArr.slice().sort((a, b) => a - b);
+  const normMedian = sorted[Math.floor(sorted.length / 2)];
+  if (!normMedian || normMedian === 0) { alert('Cannot normalize flux (median is zero).'); return; }
+
+  const normFlux = curve.flux.map(v => isFinite(v) ? v / normMedian : NaN);
+  const normErr = curve.error ? curve.error.map(v => isFinite(v) ? v / normMedian : NaN) : null;
+
+  const statusEl = document.getElementById('fittingJobStatus');
+  if (statusEl) statusEl.textContent = 'Fitting transit...';
+
+  try {
+    const body = {
+      time: curve.time,
+      flux: normFlux,
+      error: normErr,
+      period: params.period,
+      rp_rs_guess: params.rp_rs_guess,
+      a_rs: params.a_rs,
+      inc: params.inc,
+      ecc: params.ecc,
+      omega: params.omega,
+      limb_dark: params.limb_dark,
+      u: params.u,
+      fit_limb_dark: params.fit_limb_dark,
+    };
+
+    const resp = await fetch('/fit/transit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) throw new Error(await resp.text().catch(() => resp.statusText) || `Server error (${resp.status})`);
+    const result = await resp.json();
+
+    if (!result.success) {
+      alert('Transit fit failed: ' + (result.error || 'Unknown error'));
+      if (statusEl) statusEl.textContent = '';
+      return;
+    }
+
+    // Stash normalization median for de-normalizing the overlay
+    result._normMedian = normMedian;
+
+    lastTransitFitResult = result;
+    showTransitFitOverlay = true;
+    updateFitParameterReadout('transit', result);
+    updateSpectrumPlot();
+    window.dispatchEvent(new CustomEvent('transitFitComplete'));
+    if (statusEl) statusEl.textContent = '';
+  } catch (e) {
+    alert('Transit fit request failed: ' + e.message);
+    if (statusEl) statusEl.textContent = '';
+  }
+}
+
+/**
+ * Clear the transit fit overlay and readout.
+ */
+function clearTransitFit() {
+  lastTransitFitResult = null;
+  showTransitFitOverlay = false;
+  updateSpectrumPlot();
+  const readout = document.getElementById('fittingParamsReadout');
+  if (readout) readout.innerHTML = '';
+}
+
+/**
+ * Request transit depth vs wavelength sweep (async).
+ */
+async function requestTransitSweep() {
+  if (!currentSpectrumData) { alert('No spectrum data loaded.'); return; }
+
+  const params = _getTransitParams();
+  if (!params) return;
+
+  const statusEl = document.getElementById('fittingJobStatus');
+  if (statusEl) statusEl.textContent = 'Starting transmission spectrum...';
+
+  try {
+    const rawFlux = currentSpectrumData.rawFluxData || currentSpectrumData.fluxData;
+    const rawErr = currentSpectrumData.rawErrorData || currentSpectrumData.errorData;
+    const ref = currentSpectrumData.referenceSpectrum;
+
+    // Normalize each wavelength row by its reference spectrum value (or row median)
+    const normFlux2d = [];
+    const normErr2d = [];
+    for (let i = 0; i < rawFlux.length; i++) {
+      const row = rawFlux[i];
+      // Use reference spectrum value if available, otherwise row median
+      let normVal;
+      if (ref && ref[i] && isFinite(ref[i]) && ref[i] !== 0) {
+        normVal = ref[i];
+      } else {
+        const validRow = row.filter(v => isFinite(v));
+        const s = validRow.slice().sort((a, b) => a - b);
+        normVal = s.length > 0 ? s[Math.floor(s.length / 2)] : 1;
+      }
+      normFlux2d.push(row.map(v => isFinite(v) ? v / normVal : NaN));
+      if (rawErr && rawErr[i]) {
+        normErr2d.push(rawErr[i].map(v => isFinite(v) ? v / normVal : NaN));
+      } else {
+        normErr2d.push(row.map(() => NaN));
+      }
+    }
+
+    const body = {
+      wavelengths: Array.from(currentSpectrumData.rawWavelengths || currentSpectrumData.wavelengthData),
+      time: Array.from(currentSpectrumData.rawTime || currentSpectrumData.timeData),
+      flux_2d: normFlux2d,
+      error_2d: normErr2d,
+      period: params.period,
+      rp_rs_guess: params.rp_rs_guess,
+      a_rs: params.a_rs,
+      inc: params.inc,
+      ecc: params.ecc,
+      omega: params.omega,
+      limb_dark: params.limb_dark,
+      u: params.u,
+      fit_limb_dark: params.fit_limb_dark,
+    };
+
+    const resp = await fetch('/fit/transit_all_wavelengths', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) throw new Error(await resp.text().catch(() => resp.statusText) || `Server error (${resp.status})`);
+    const data = await resp.json();
+
+    if (!data.job_id) {
+      alert('Failed to start sweep: ' + (data.error || 'Unknown error'));
+      if (statusEl) statusEl.textContent = '';
+      return;
+    }
+
+    transitSweepJobId = data.job_id;
+    _pollFitJob(data.job_id, statusEl, (result) => {
+      transitSweepJobId = null;
+      if (result.success) {
+        renderTransmissionSpectrumPlot(result);
+        window.dispatchEvent(new CustomEvent('transitSweepComplete'));
+      } else {
+        alert('Transit sweep failed: ' + (result.error || 'Unknown error'));
+      }
+    });
+  } catch (e) {
+    alert('Transit sweep request failed: ' + e.message);
+    if (statusEl) statusEl.textContent = '';
+  }
+}
+
+/**
+ * Render transit depth (ppm) vs wavelength (transmission spectrum).
+ */
+function renderTransmissionSpectrumPlot(result) {
+  const container = document.getElementById('derivedPlotContainer');
+  if (!container) return;
+  container.classList.remove('hidden');
+
+  const wl = result.wavelengths;
+  const depth = result.transit_depth;
+  const depthErr = result.transit_depth_err;
+  const mask = result.success_mask;
+
+  // Filter to successful fits
+  const xFilt = [], yFilt = [], eFilt = [];
+  for (let i = 0; i < wl.length; i++) {
+    if (mask[i] && depth[i] != null && isFinite(depth[i])) {
+      xFilt.push(wl[i]);
+      yFilt.push(depth[i]);
+      eFilt.push(depthErr[i] != null && isFinite(depthErr[i]) ? depthErr[i] : 0);
+    }
+  }
+
+  const trace = {
+    x: xFilt,
+    y: yFilt,
+    error_y: {
+      type: 'data',
+      array: eFilt,
+      visible: true,
+      color: '#06B6D4',
+    },
+    type: 'scatter',
+    mode: 'markers',
+    marker: { color: '#06B6D4', size: 5 },
+    name: 'Transit Depth',
+  };
+
+  const layout = {
+    template: 'plotly_dark',
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#ffffff' },
+    xaxis: { title: 'Wavelength (um)', gridcolor: 'rgba(74,144,217,0.12)' },
+    yaxis: { title: 'Transit Depth (ppm)', gridcolor: 'rgba(74,144,217,0.12)' },
+    margin: { l: 70, r: 40, t: 30, b: 50 },
+    height: 400,
+    showlegend: false,
+    title: { text: 'Transmission Spectrum', font: { size: 14, color: '#06B6D4' } },
+  };
+
+  Plotly.newPlot('derivedPlot', [trace], layout, { responsive: true });
 }
 
 // Overlay Rendering
@@ -695,11 +1044,39 @@ function applyFitOverlays() {
     }
   }
 
+  // Transit fit overlay
+  if (showTransitFitOverlay && lastTransitFitResult && spectrumMode === 'vs_time') {
+    const normMedian = lastTransitFitResult._normMedian || 1;
+    let overlayY;
+
+    if (currentSpectrumData && currentSpectrumData.zAxisDisplay === 'flux') {
+      // De-normalize: multiply batman output (near 1.0) by median to get Jy
+      overlayY = lastTransitFitResult.fit_values.map(v =>
+        isFinite(v) ? v * normMedian : NaN
+      );
+    } else {
+      // Variability display: (batman_val - 1) * 100
+      overlayY = lastTransitFitResult.fit_values.map(v =>
+        isFinite(v) ? (v - 1) * 100 : NaN
+      );
+    }
+
+    Plotly.addTraces('spectrumPlot', {
+      x: lastTransitFitResult.fit_time,
+      y: overlayY,
+      type: 'scatter',
+      mode: 'lines',
+      line: { color: '#06B6D4', width: 2.5 },
+      name: 'Transit Fit',
+      hoverinfo: 'skip',
+    });
+  }
+
   // Expand y-axis if any overlay trace extends beyond the current range
   const overlayYValues = [];
   for (let i = 0; i < plotEl.data.length; i++) {
     const name = plotEl.data[i].name || '';
-    if (name === 'Sine Fit' || name === 'Grid Fit' || name.startsWith('Chunk')) {
+    if (name === 'Sine Fit' || name === 'Grid Fit' || name === 'Transit Fit' || name.startsWith('Chunk')) {
       const yArr = plotEl.data[i].y;
       if (yArr) {
         for (let j = 0; j < yArr.length; j++) {
@@ -1038,6 +1415,15 @@ function updateFitParameterReadout(type, result) {
       html += `<span style="color: var(--text-dim); margin-left: 1rem;">&chi;&sup2;_red = ${cr.reduced_chi_squared.toFixed(3)}, scale = ${cr.scaling_factor.toExponential(4)}</span><br>`;
     });
     el.innerHTML = html;
+  } else if (type === 'transit') {
+    const p = result.params;
+    let html = `<span style="color: #06B6D4; font-weight: 600;">Transit Fit</span><br>`;
+    html += `<span style="color: var(--text-secondary);">Rp/Rs = ${p.rp_rs.toFixed(5)} &pm; ${p.rp_rs_err.toFixed(5)}</span><br>`;
+    html += `<span style="color: var(--text-secondary);">Depth = ${(p.depth * 100).toFixed(4)}% (${p.depth_ppm.toFixed(0)} &pm; ${p.depth_ppm_err.toFixed(0)} ppm)</span><br>`;
+    html += `<span style="color: var(--text-secondary);">t0 = ${p.t0.toFixed(4)} hr</span><br>`;
+    html += `<span style="color: var(--text-dim);">Limb dark: ${p.limb_dark}, u = [${p.u.map(v => v.toFixed(3)).join(', ')}]</span><br>`;
+    html += `<span style="color: var(--text-dim);">&chi;&sup2;_red = ${result.reduced_chi_squared.toFixed(3)}</span>`;
+    el.innerHTML = html;
   }
 }
 
@@ -1052,6 +1438,7 @@ async function loadGridList() {
 
   try {
     const resp = await fetch('/fit/grid_list');
+    if (!resp.ok) throw new Error(await resp.text().catch(() => resp.statusText) || `Server error (${resp.status})`);
     const data = await resp.json();
 
     selectEl.innerHTML = '<option value="">-- No grids available --</option>';
@@ -1070,6 +1457,276 @@ async function loadGridList() {
   }
 }
 
+// ExoMAST Target Parameter Lookup
+
+let _exomastPopupShown = false;
+let _exomastParams = null;
+let _exomastFoundKeys = [];
+let _exomastAbort = null;
+let _exomastDebounce = null;
+
+/**
+ * Read the detected target name from FITS metadata.
+ * @returns {string|null}
+ */
+function _getDetectedTarget() {
+  const meta = window.__stampMetadata;
+  if (!meta || !meta.targets || meta.targets.length === 0) return null;
+  const t = meta.targets[0];
+  return (t && t !== 'Unknown') ? t : null;
+}
+
+/**
+ * Fetch target parameters via our unified lookup proxy
+ * (ExoMAST → Exoplanet.eu → SIMBAD).
+ * @param {string} name
+ * @returns {Promise<{found: boolean, params?: Object, planet_name?: string, sources?: string[], error?: string}>}
+ */
+async function lookupExoMAST(name) {
+  try {
+    const resp = await fetch(`/exomast/lookup/${encodeURIComponent(name)}`);
+    if (!resp.ok) throw new Error(await resp.text().catch(() => resp.statusText) || `Server error (${resp.status})`);
+    return await resp.json();
+  } catch (e) {
+    return { found: false, error: 'Network error: ' + e.message };
+  }
+}
+
+/**
+ * Fetch autocomplete suggestions from ExoMAST with debounce.
+ * @param {string} term
+ * @param {function} callback - receives array of name strings
+ */
+function fetchAutocomplete(term, callback) {
+  if (_exomastDebounce) clearTimeout(_exomastDebounce);
+  if (_exomastAbort) _exomastAbort.abort();
+
+  if (!term || term.length < 2) { callback([]); return; }
+
+  _exomastDebounce = setTimeout(async () => {
+    _exomastAbort = new AbortController();
+    try {
+      const resp = await fetch(`/exomast/autocomplete?term=${encodeURIComponent(term)}`, {
+        signal: _exomastAbort.signal,
+      });
+      if (!resp.ok) { callback([]); return; }
+      const names = await resp.json();
+      callback(Array.isArray(names) ? names : []);
+    } catch (e) {
+      if (e.name !== 'AbortError') callback([]);
+    }
+  }, 300);
+}
+
+/**
+ * Apply looked-up parameters to fitting input fields.
+ * Fills transit fields (period, a/Rs, Rp/Rs, inc, ecc, omega)
+ * and sinusoidal period guess from rotation_period.
+ * @param {Object} params
+ */
+function applyExoMASTParams(params, foundKeys) {
+  if (!params) return;
+  const fk = foundKeys || _exomastFoundKeys || [];
+  const map = {
+    orbital_period:  { id: 'transitPeriod', convert: v => (v * 24).toFixed(4) },
+    a_rs:            { id: 'transitARs' },
+    rp_rs:           { id: 'transitRpRs' },
+    inclination:     { id: 'transitInc' },
+    eccentricity:    { id: 'transitEcc' },
+    omega:           { id: 'transitOmega' },
+    rotation_period: { id: 'fitPeriodGuess', convert: v => (v * 24).toFixed(4) },
+  };
+
+  for (const [key, cfg] of Object.entries(map)) {
+    const val = params[key];
+    if (val == null) continue;
+    const el = document.getElementById(cfg.id);
+    if (!el) continue;
+    el.value = cfg.convert ? cfg.convert(val) : val;
+  }
+
+  // Show warning icons on transit fields not found in catalogs
+  const transitWarnable = {
+    a_rs: 'transitARs',
+    rp_rs: 'transitRpRs',
+    inclination: 'transitInc',
+    eccentricity: 'transitEcc',
+    omega: 'transitOmega',
+  };
+  for (const [paramKey, inputId] of Object.entries(transitWarnable)) {
+    const el = document.getElementById(inputId);
+    if (!el) continue;
+    const existing = el.parentElement.querySelector('.param-warning');
+    if (existing) existing.remove();
+    if (!fk.includes(paramKey)) {
+      const warn = document.createElement('span');
+      warn.className = 'param-warning';
+      warn.title = 'Not found in catalogs \u2014 using default value';
+      warn.textContent = ' \u26A0';
+      warn.style.cssText = 'color: #F59E0B; cursor: help; font-size: 0.85rem;';
+      el.parentElement.appendChild(warn);
+    }
+  }
+}
+
+/**
+ * Render the parameter preview table in the popup.
+ * @param {Object} params
+ */
+function _renderExoMASTPreview(params, sources) {
+  const tbody = document.getElementById('exomastPreviewBody');
+  const preview = document.getElementById('exomastPreview');
+  if (!tbody || !preview) return;
+
+  function fmt(val) {
+    if (typeof val !== 'number') return val;
+    return +val.toPrecision(6);
+  }
+
+  const allRows = [
+    ['Period (days)',    params.orbital_period],
+    ['a/R\u2097',       params.a_rs],
+    ['Rp/R\u2097',      params.rp_rs],
+    ['Inclination (\u00b0)', params.inclination],
+    ['Eccentricity',    params.eccentricity],
+    ['\u03c9 (\u00b0)', params.omega],
+    ['Spectral Type',   params.spectral_type],
+    ['Teff (K)',        params.teff],
+    ['log(g)',          params.stellar_logg],
+    ['[Fe/H]',         params.metallicity],
+    ['Mass (M_Jup)',    params.mass_mjup],
+    ['Radius (R_Jup)',  params.radius_rjup],
+    ['Distance (pc)',   params.distance_pc],
+    ['Rotation (days)', params.rotation_period],
+    ['v sin i (km/s)',  params.v_sini],
+    ['RV (km/s)',       params.radial_velocity],
+  ];
+
+  // Only show rows that have a value
+  const rows = allRows.filter(function(r) { return r[1] != null; });
+
+  tbody.innerHTML = rows.map(function(r) {
+    var label = r[0], val = r[1];
+    var display = fmt(val);
+    return '<tr style="border-bottom: 1px solid var(--glass-border);">' +
+      '<td style="padding: 4px 6px; color: var(--text-secondary);">' + label + '</td>' +
+      '<td style="padding: 4px 6px; text-align: right; color: var(--text-primary);">' + display + '</td>' +
+    '</tr>';
+  }).join('');
+
+  // Source attribution
+  if (sources && sources.length) {
+    tbody.innerHTML += '<tr><td colspan="2" style="padding: 6px 6px 2px; color: var(--text-dim); font-size: 0.75rem;">' +
+      'Source: ' + sources.join(', ') + '</td></tr>';
+  }
+
+  preview.classList.remove('hidden');
+}
+
+/**
+ * Perform a full ExoMAST lookup and update the popup UI.
+ * @param {string} name
+ */
+async function performExoMASTLookup(name) {
+  const statusEl = document.getElementById('exomastStatus');
+  const applyBtn = document.getElementById('exomastApplyBtn');
+  const preview = document.getElementById('exomastPreview');
+
+  if (!name || !name.trim()) {
+    if (statusEl) statusEl.textContent = 'Enter a target name';
+    return;
+  }
+
+  if (statusEl) { statusEl.textContent = 'Searching catalogs for ' + name + '...'; statusEl.style.color = 'var(--text-secondary)'; }
+  if (applyBtn) applyBtn.classList.add('hidden');
+  if (preview) preview.classList.add('hidden');
+
+  const result = await lookupExoMAST(name.trim());
+
+  if (result.found) {
+    _exomastParams = result.params;
+    _exomastFoundKeys = result.found_keys || [];
+    var sourceText = (result.sources && result.sources.length) ? ' (' + result.sources.join(', ') + ')' : '';
+    if (statusEl) { statusEl.textContent = 'Found: ' + result.planet_name + sourceText; statusEl.style.color = '#10b981'; }
+    _renderExoMASTPreview(result.params, result.sources);
+    // Show Apply button if any fillable params exist (transit or sinusoidal)
+    var canApply = ['orbital_period', 'a_rs', 'rp_rs', 'inclination', 'eccentricity', 'omega', 'rotation_period']
+        .some(function(k) { return result.params[k] != null; });
+    if (applyBtn) { if (canApply) applyBtn.classList.remove('hidden'); }
+  } else {
+    _exomastParams = null;
+    _exomastFoundKeys = [];
+    if (statusEl) { statusEl.textContent = result.error || 'Target not found'; statusEl.style.color = '#ef4444'; }
+  }
+}
+
+/**
+ * Show the ExoMAST popup, optionally pre-filling the target input.
+ * @param {string|null} target
+ */
+function showExoMASTPopup(target) {
+  const popup = document.getElementById('exomastPopup');
+  const input = document.getElementById('exomastTargetInput');
+  const statusEl = document.getElementById('exomastStatus');
+  const applyBtn = document.getElementById('exomastApplyBtn');
+  const preview = document.getElementById('exomastPreview');
+  const dropdown = document.getElementById('exomastAutocomplete');
+
+  if (!popup) return;
+
+  // Reset state
+  _exomastParams = null;
+  _exomastFoundKeys = [];
+  if (applyBtn) applyBtn.classList.add('hidden');
+  if (preview) preview.classList.add('hidden');
+  if (dropdown) dropdown.style.display = 'none';
+
+  if (target) {
+    if (input) input.value = target;
+    if (statusEl) { statusEl.textContent = 'Detected target: ' + target; statusEl.style.color = 'var(--text-secondary)'; }
+  } else {
+    if (input) input.value = '';
+    if (statusEl) { statusEl.textContent = 'Enter a target name'; statusEl.style.color = 'var(--text-secondary)'; }
+  }
+
+  popup.classList.remove('hidden');
+  _exomastPopupShown = true;
+
+  // Auto-trigger lookup if we have a target
+  if (target) {
+    performExoMASTLookup(target);
+  }
+}
+
+/**
+ * Hide the ExoMAST popup.
+ */
+function hideExoMASTPopup() {
+  const popup = document.getElementById('exomastPopup');
+  if (popup) popup.classList.add('hidden');
+  const dropdown = document.getElementById('exomastAutocomplete');
+  if (dropdown) dropdown.style.display = 'none';
+}
+
+/**
+ * Render autocomplete dropdown items.
+ * @param {string[]} names
+ */
+function _renderAutocompleteDropdown(names) {
+  const dropdown = document.getElementById('exomastAutocomplete');
+  if (!dropdown) return;
+
+  if (!names || names.length === 0) {
+    dropdown.style.display = 'none';
+    return;
+  }
+
+  dropdown.innerHTML = names.slice(0, 10).map(n =>
+    `<div class="exomast-autocomplete-item">${n}</div>`
+  ).join('');
+  dropdown.style.display = 'block';
+}
+
 // Event Binding
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -1077,6 +1734,9 @@ document.addEventListener('DOMContentLoaded', function() {
   loadGridList();
 
   // Sinusoidal fit buttons
+  const lsBtn = document.getElementById('lombScargleBtn');
+  if (lsBtn) lsBtn.addEventListener('click', requestLombScargle);
+
   const fitSineBtn = document.getElementById('fitSineBtn');
   if (fitSineBtn) fitSineBtn.addEventListener('click', requestSineFit);
 
@@ -1096,6 +1756,16 @@ document.addEventListener('DOMContentLoaded', function() {
   const gridSweepBtn = document.getElementById('gridSweepBtn');
   if (gridSweepBtn) gridSweepBtn.addEventListener('click', requestGridSweep);
 
+  // Transit fit buttons
+  const fitTransitBtn = document.getElementById('fitTransitBtn');
+  if (fitTransitBtn) fitTransitBtn.addEventListener('click', requestTransitFit);
+
+  const clearTransitBtn = document.getElementById('clearTransitFitBtn');
+  if (clearTransitBtn) clearTransitBtn.addEventListener('click', clearTransitFit);
+
+  const transitSweepBtn = document.getElementById('transitSweepBtn');
+  if (transitSweepBtn) transitSweepBtn.addEventListener('click', requestTransitSweep);
+
   // Chunk count input — build range rows when > 1
   const chunkInput = document.getElementById('chunkCountInput');
   if (chunkInput) {
@@ -1109,4 +1779,114 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
+
+  // ── ExoMAST Event Bindings ──
+
+  // Autocomplete on target input
+  const exomastInput = document.getElementById('exomastTargetInput');
+  if (exomastInput) {
+    exomastInput.addEventListener('input', function() {
+      fetchAutocomplete(this.value, _renderAutocompleteDropdown);
+    });
+    exomastInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const dropdown = document.getElementById('exomastAutocomplete');
+        if (dropdown) dropdown.style.display = 'none';
+        performExoMASTLookup(this.value);
+      }
+    });
+  }
+
+  // Autocomplete item click
+  const autocompleteEl = document.getElementById('exomastAutocomplete');
+  if (autocompleteEl) {
+    autocompleteEl.addEventListener('click', function(e) {
+      const item = e.target.closest('.exomast-autocomplete-item');
+      if (!item) return;
+      const name = item.textContent.trim();
+      if (exomastInput) exomastInput.value = name;
+      this.style.display = 'none';
+      performExoMASTLookup(name);
+    });
+  }
+
+  // Look Up button
+  const lookupBtn = document.getElementById('exomastLookupBtn');
+  if (lookupBtn) {
+    lookupBtn.addEventListener('click', function() {
+      const input = document.getElementById('exomastTargetInput');
+      if (input) performExoMASTLookup(input.value);
+    });
+  }
+
+  // Apply button
+  const applyBtn = document.getElementById('exomastApplyBtn');
+  if (applyBtn) {
+    applyBtn.addEventListener('click', function() {
+      applyExoMASTParams(_exomastParams);
+      // Open the relevant fitting sections
+      if (_exomastParams) {
+        var hasTransit = ['orbital_period', 'a_rs', 'rp_rs', 'inclination', 'eccentricity', 'omega']
+            .some(function(k) { return _exomastParams[k] != null; });
+        if (hasTransit) {
+          var td = document.getElementById('transitFittingDetails');
+          if (td) td.open = true;
+        }
+        if (_exomastParams.rotation_period != null) {
+          var sd = document.getElementById('sineFittingDetails');
+          if (sd) sd.open = true;
+        }
+      }
+      hideExoMASTPopup();
+    });
+  }
+
+  // Dismiss button
+  const dismissBtn = document.getElementById('exomastDismissBtn');
+  if (dismissBtn) dismissBtn.addEventListener('click', hideExoMASTPopup);
+
+  // Backdrop click dismisses
+  const backdrop = document.getElementById('exomastPopupBackdrop');
+  if (backdrop) backdrop.addEventListener('click', hideExoMASTPopup);
+
+  // ExoMAST summary button — re-open popup manually
+  const exomastBtn = document.getElementById('exomastBtn');
+  if (exomastBtn) {
+    exomastBtn.addEventListener('click', function(e) {
+      e.stopPropagation(); // Don't toggle the <details>
+      e.preventDefault();
+      showExoMASTPopup(_getDetectedTarget());
+    });
+  }
+
+  // Show popup when a fitting sub-section opens (once per dataset)
+  ['sineFittingDetails', 'transitFittingDetails'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('toggle', function() {
+        if (this.open && !_exomastPopupShown && window.__stampMetadata) {
+          setTimeout(function() {
+            showExoMASTPopup(_getDetectedTarget());
+          }, 300);
+        }
+      });
+    }
+  });
+
+  // Bind Look Up button on Sinusoidal summary
+  var exomastBtnSine = document.getElementById('exomastBtnSine');
+  if (exomastBtnSine) {
+    exomastBtnSine.addEventListener('click', function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      showExoMASTPopup(_getDetectedTarget());
+    });
+  }
+
+  // Reset on new dataset load
+  window.addEventListener('stampsDataLoaded', function() {
+    _exomastPopupShown = false;
+    _exomastParams = null;
+  });
 });

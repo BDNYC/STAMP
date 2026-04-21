@@ -93,6 +93,15 @@ let lastChunkedFitResult = null;
 /** @type {Object|null} Last multi-component fit result */
 let lastMultiComponentFitResult = null;
 
+/** @type {Object|null} Last transit fit result */
+let lastTransitFitResult = null;
+
+/** @type {boolean} Whether transit fit overlay is active */
+let showTransitFitOverlay = false;
+
+/** @type {string|null} Job ID for running transit sweep */
+let transitSweepJobId = null;
+
 // Color Scales
 
 /** @type {Array<{name:string, class:string}>} */

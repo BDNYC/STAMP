@@ -6,6 +6,7 @@ from routes.main import main_bp
 from routes.upload import upload_bp
 from routes.jobs import jobs_bp
 from routes.fitting import fitting_bp
+from routes.exomast import exomast_bp
 
 
 def register_blueprints(app):
@@ -14,3 +15,4 @@ def register_blueprints(app):
     app.register_blueprint(upload_bp)
     app.register_blueprint(jobs_bp)
     app.register_blueprint(fitting_bp)
+    app.register_blueprint(exomast_bp)

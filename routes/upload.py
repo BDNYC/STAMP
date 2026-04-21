@@ -4,7 +4,6 @@ import io
 import os
 import json
 import time
-import uuid
 import base64
 import shutil
 import zipfile
@@ -21,7 +20,7 @@ import h5py
 
 import state
 from config import COLOR_SCALES, BASE_DIR
-from data_io import apply_data_ranges
+from data_io import apply_data_ranges, load_lightcurve_txt_folder
 from processing import process_mast_files_with_gaps
 from plotting import create_surface_plot_with_visits, create_heatmap_plot
 
@@ -252,11 +251,9 @@ def upload_spectrum_frames():
             return jsonify({"error": "output file not created"}), 500
 
         # Store the video path so /download_plots can find it
-        token = str(uuid.uuid4())
-        state.video_tmp_paths[token] = outpath
         state.latest_spectrum_mp4_path = outpath
 
-        return jsonify({"video_token": token, "success": True})
+        return jsonify({"success": True})
 
     except subprocess.TimeoutExpired:
         return jsonify({"error": "ffmpeg timed out"}), 500
@@ -302,14 +299,20 @@ def upload_mast():
     if time_range_min or time_range_max:
         t_min = float(time_range_min) if time_range_min else None
         t_max = float(time_range_max) if time_range_max else None
+        if t_min is not None and t_max is not None and t_min > t_max:
+            t_min, t_max = t_max, t_min
         time_range = (t_min, t_max)
     if wavelength_range_min or wavelength_range_max:
         wl_min = float(wavelength_range_min) if wavelength_range_min else None
         wl_max = float(wavelength_range_max) if wavelength_range_max else None
+        if wl_min is not None and wl_max is not None and wl_min > wl_max:
+            wl_min, wl_max = wl_max, wl_min
         wavelength_range = (wl_min, wl_max)
     if variability_range_min or variability_range_max:
         v_min = float(variability_range_min) if variability_range_min else None
         v_max = float(variability_range_max) if variability_range_max else None
+        if v_min is not None and v_max is not None and v_min > v_max:
+            v_min, v_max = v_max, v_min
         variability_range = (v_min, v_max)
 
     # Extract, process, and plot — temp_dir always cleaned up via finally
@@ -321,36 +324,50 @@ def upload_mast():
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(temp_dir)
 
+        # Detect format: FITS/H5 or txt light curves
         fits_files = []
-        for root, _, files in os.walk(temp_dir):
+        txt_files = []
+        for root, dirs, files in os.walk(temp_dir):
+            dirs[:] = [d for d in dirs if d != '__MACOSX']
             for f in files:
+                if f.startswith('._') or f.startswith('.'):
+                    continue
                 if f.lower().endswith(('.fits', '.h5')):
                     fits_files.append(os.path.join(root, f))
+                elif f.lower().endswith('.txt'):
+                    txt_files.append(os.path.join(root, f))
 
-        file_times = []
-        for fp in fits_files:
-            try:
-                if fp.endswith('.fits'):
-                    with fits.open(fp) as hdul:
-                        t = hdul['INT_TIMES'].data['int_mid_MJD_UTC'][0]
-                elif fp.endswith('.h5'):
-                    with h5py.File(fp, 'r') as h:
-                        t = float(h['time'][0]) if 'time' in h else None
-                else:
-                    t = None
-                if t is not None:
-                    file_times.append((fp, t))
-            except Exception:
-                continue
-        fits_files_sorted = [fp for fp, _ in sorted(file_times, key=lambda x: x[1])]
+        if fits_files:
+            file_times = []
+            for fp in fits_files:
+                try:
+                    if fp.endswith('.fits'):
+                        with fits.open(fp) as hdul:
+                            t = hdul['INT_TIMES'].data['int_mid_MJD_UTC'][0]
+                    elif fp.endswith('.h5'):
+                        with h5py.File(fp, 'r') as h:
+                            t = float(h['time'][0]) if 'time' in h else None
+                    else:
+                        t = None
+                    if t is not None:
+                        file_times.append((fp, t))
+                except Exception:
+                    continue
+            fits_files_sorted = [fp for fp, _ in sorted(file_times, key=lambda x: x[1])]
 
-        # Run processing pipeline
-        wavelength_1d, flux_norm_2d, flux_raw_2d, time_1d, metadata, error_raw_2d = (
-            process_mast_files_with_gaps(
-                fits_files_sorted,
-                use_interpolation,
+            wavelength_1d, flux_norm_2d, flux_raw_2d, time_1d, metadata, error_raw_2d = (
+                process_mast_files_with_gaps(
+                    fits_files_sorted,
+                    use_interpolation,
+                )
             )
-        )
+        elif txt_files:
+            txt_dir = os.path.dirname(txt_files[0])
+            wavelength_1d, flux_norm_2d, flux_raw_2d, time_1d, metadata, error_raw_2d = (
+                load_lightcurve_txt_folder(txt_dir)
+            )
+        else:
+            return jsonify({'error': 'No valid data files (.fits, .h5, or .txt) found in archive.'}), 400
 
         # Apply user-specified data ranges
         range_info = []
@@ -413,7 +430,7 @@ def upload_mast():
             z_range=variability_range,
             z_axis_display=z_axis_display,
             flux_unit=metadata.get('flux_unit', 'Unknown'),
-            errors_2d=error_raw_2d_filtered,
+            errors_2d=errors_for_plot,
         )
 
         # Store in shared state for /download_plots
