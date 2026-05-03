@@ -67,3 +67,8 @@ six==1.17.0
 packaging==24.2
 soupsieve==2.7
 webencodings==0.5.1
+
+# Testing
+pytest==8.3.5
+pytest-cov==6.1.1
+responses==0.25.7

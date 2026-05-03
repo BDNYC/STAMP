@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "slow: marks tests that use real demo data (deselect with '-m \"not slow\"')",
+]
+addopts = "--tb=short -q"
